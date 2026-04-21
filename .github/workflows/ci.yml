@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin pytest pytest-benchmark openpyxl pandas python-calamine xlsxwriter
+
+      - name: Build extension (release)
+        working-directory: .
+        run: maturin develop --release
+
+      - name: Run unit tests
+        run: pytest tests/
+
+      - name: Run large read benchmarks (smoke size)
+        env:
+          FAST_XLSX_BENCH_ROWS: "400"
+          FAST_XLSX_BENCH_COLS: "60"
+        run: pytest benchmarks/

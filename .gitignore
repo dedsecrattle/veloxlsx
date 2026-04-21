@@ -1,0 +1,44 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Python
+.venv/
+venv/
+.env/
+.env.*
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+/dist/
+/build/
+pip-wheel-metadata/
+wheels/
+*.whl
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# Maturin / packaging
+*.so
+*.dylib
+*.dll
+
+uv.lock
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*~

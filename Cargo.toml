@@ -1,0 +1,15 @@
+[package]
+name = "fast_xlsx"
+version = "0.1.0"
+edition = "2021"
+description = "Fast XLSX reader (Python bindings over Rust)"
+
+[lib]
+name = "fast_xlsx"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py310"] }
+quick-xml = "0.37"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+thiserror = "2"

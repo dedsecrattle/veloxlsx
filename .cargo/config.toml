@@ -1,0 +1,6 @@
+# PyO3 `extension-module` builds omit libpython at link time; macOS needs this for plain `cargo build`/`cargo test`.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

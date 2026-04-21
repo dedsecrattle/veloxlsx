@@ -1,0 +1,36 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "fast-xlsx"
+version = "0.1.0"
+description = "Python-first XLSX reader with a Rust core"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "fast-xlsx contributors" }]
+keywords = ["xlsx", "excel", "spreadsheet", "rust"]
+classifiers = [
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+]
+
+[project.optional-dependencies]
+dev = [
+  "maturin>=1.5",
+  "pytest>=8.0",
+  "pytest-benchmark>=4.0",
+  "openpyxl>=3.1",
+  "pandas>=2.2",
+  "python-calamine>=0.5",
+  "xlsxwriter>=3.1",
+]
+
+[tool.maturin]
+module-name = "fast_xlsx"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
