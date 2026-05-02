@@ -88,6 +88,17 @@ pip install maturin
 maturin develop --extras dev
 ```
 
+### Typing (Pyright, mypy, …)
+
+The wheel / editable install is **PEP 561**–aware (`py.typed` plus [`python/fast_xlsx/__init__.pyi`](python/fast_xlsx/__init__.pyi)). The native module is `fast_xlsx._native`; import the public API from **`fast_xlsx`**. Runtime aliases **`CellValue`**, **`Row`**, and **`Grid`** match the stubs:
+
+```python
+from fast_xlsx import CellValue, Grid, Row, read_xlsx
+
+def f(rows: Grid) -> list[Row]:
+    return [list(r) for r in rows]
+```
+
 ## Usage
 
 ```python

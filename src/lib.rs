@@ -367,7 +367,7 @@ fn load(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyWorkbook>> {
 }
 
 #[pymodule]
-fn fast_xlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWorkbook>()?;
     m.add_class::<PySheet>()?;
     m.add_class::<PyStreamWriter>()?;
