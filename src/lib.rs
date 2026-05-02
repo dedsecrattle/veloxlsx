@@ -1,9 +1,10 @@
 mod error;
+mod row_stream;
 mod write;
 mod xlsx;
 
 use error::XlsxError;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyStopIteration, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAnyMethods, PyBool, PyList, PyModule, PyString};
 use std::path::PathBuf;
@@ -24,6 +25,11 @@ struct PySheet {
 #[pyclass(name = "StreamWriter")]
 struct PyStreamWriter {
     inner: Option<write::StreamingWriter>,
+}
+
+#[pyclass(name = "RowIter")]
+struct PyRowIter {
+    parser: Option<row_stream::WorksheetRowParser>,
 }
 
 #[pymethods]
@@ -80,6 +86,31 @@ impl PyWorkbook {
         };
         grid_to_py(py, &grid)
     }
+
+    fn iter_rows(&self, py: Python<'_>, sheet: Bound<'_, PyAny>) -> PyResult<Py<PyRowIter>> {
+        let index = if let Ok(i) = sheet.extract::<isize>() {
+            let n = self.inner.sheets.len() as isize;
+            let idx = if i < 0 { n + i } else { i };
+            if idx < 0 || idx >= n {
+                return Err(PyValueError::new_err("sheet index out of range"));
+            }
+            idx as usize
+        } else if let Ok(name) = sheet.extract::<String>() {
+            self.inner
+                .sheets
+                .iter()
+                .position(|s| s.name == name)
+                .ok_or_else(|| PyValueError::new_err(format!("sheet not found: {name}")))?
+        } else {
+            return Err(PyValueError::new_err("sheet must be int or str"));
+        };
+        let bytes = xlsx::read_worksheet_inflated(&self.inner, &self.inner.sheets[index].path)
+            .map_err(py_err)?;
+        let parser = row_stream::WorksheetRowParser::new(bytes, self.inner.shared_strings.clone());
+        Py::new(py, PyRowIter {
+            parser: Some(parser),
+        })
+    }
 }
 
 #[pymethods]
@@ -93,6 +124,45 @@ impl PySheet {
         let grid = xlsx::read_sheet_grid(&self.workbook, self.index).map_err(py_err)?;
         grid_to_py(py, &grid)
     }
+
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<PyRowIter>> {
+        let bytes =
+            xlsx::read_worksheet_inflated(&self.workbook, &self.workbook.sheets[self.index].path)
+                .map_err(py_err)?;
+        let parser =
+            row_stream::WorksheetRowParser::new(bytes, self.workbook.shared_strings.clone());
+        Py::new(py, PyRowIter {
+            parser: Some(parser),
+        })
+    }
+}
+
+#[pymethods]
+impl PyRowIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let Some(p) = self.parser.as_mut() else {
+            return Err(PyStopIteration::new_err(()));
+        };
+        match p.next_row().map_err(py_err)? {
+            None => {
+                self.parser = None;
+                Err(PyStopIteration::new_err(()))
+            }
+            Some(row) => row_to_py(py, &row),
+        }
+    }
+}
+
+fn row_to_py(py: Python<'_>, row: &[xlsx::CellValue]) -> PyResult<Py<PyAny>> {
+    let py_row = PyList::empty(py);
+    for cell in row {
+        py_row.append(cell_value_to_py(py, cell)?)?;
+    }
+    Ok(py_row.into_any().unbind())
 }
 
 #[pymethods]
@@ -252,6 +322,39 @@ fn write_xlsx(
 }
 
 #[pyfunction]
+#[pyo3(signature = (path, sheet=None))]
+fn iter_rows(py: Python<'_>, path: PathBuf, sheet: Option<Bound<'_, PyAny>>) -> PyResult<Py<PyRowIter>> {
+    let bytes = xlsx::read_file_bytes(&path).map_err(py_err)?;
+    let wb = xlsx::parse_workbook(bytes).map_err(py_err)?;
+    let index = match sheet {
+        None => 0usize,
+        Some(s) => {
+            if let Ok(i) = s.extract::<isize>() {
+                let n = wb.sheets.len() as isize;
+                let idx = if i < 0 { n + i } else { i };
+                if idx < 0 || idx >= n {
+                    return Err(PyValueError::new_err("sheet index out of range"));
+                }
+                idx as usize
+            } else if let Ok(name) = s.extract::<String>() {
+                wb.sheets
+                    .iter()
+                    .position(|s| s.name == name)
+                    .ok_or_else(|| PyValueError::new_err(format!("sheet not found: {name}")))?
+            } else {
+                return Err(PyValueError::new_err("sheet must be int or str or None"));
+            }
+        }
+    };
+    let bytes_ws =
+        xlsx::read_worksheet_inflated(&wb, &wb.sheets[index].path).map_err(py_err)?;
+    let parser = row_stream::WorksheetRowParser::new(bytes_ws, wb.shared_strings.clone());
+    Py::new(py, PyRowIter {
+        parser: Some(parser),
+    })
+}
+
+#[pyfunction]
 fn load(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyWorkbook>> {
     let bytes = xlsx::read_file_bytes(&path).map_err(py_err)?;
     let data = xlsx::parse_workbook(bytes).map_err(py_err)?;
@@ -268,8 +371,10 @@ fn fast_xlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWorkbook>()?;
     m.add_class::<PySheet>()?;
     m.add_class::<PyStreamWriter>()?;
+    m.add_class::<PyRowIter>()?;
     m.add_function(wrap_pyfunction!(read_xlsx, m)?)?;
     m.add_function(wrap_pyfunction!(write_xlsx, m)?)?;
+    m.add_function(wrap_pyfunction!(iter_rows, m)?)?;
     m.add_function(wrap_pyfunction!(load, m)?)?;
 
     Ok(())

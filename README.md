@@ -13,6 +13,7 @@ Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks
 
 - **`fast_xlsx.write_xlsx(path, rows, sheet=...)`** — single-sheet writer with **shared-string deduplication** (memory scales with *unique* strings, not cell count).
 - **`fast_xlsx.StreamWriter(path, sheet_name=...)`** — **streaming** writer: call `write_row([...])` repeatedly; uses **inline strings** so memory stays bounded (no giant SST while writing). Supports `with` / `close()`.
+- **`fast_xlsx.iter_rows(path, sheet=...)`**, **`Workbook.iter_rows(...)`**, **`Sheet.iter_rows()`** — **streaming read** on the Python side: yields **one row at a time** (each row is a `list` of cell values). For typical workbooks whose cells are wrapped in `<row>` (Excel, XlsxWriter, OpenPyxl), Rust does **not** build a full `rows × cols` grid in memory; peak RSS stays much lower than `read_xlsx`. Sheets that need a **legacy** sparse layout (cells not under `<row>`) fall back internally to buffering like `read_xlsx`.
 - **Read path**: one **ZIP archive** is opened during `load()` / `parse_workbook` and **reused** for every sheet read; worksheet XML is parsed from the zip entry stream (no full-sheet `String`). Shared string table entries use **`Arc<str>`** so repeated values clone a pointer, not the text.
 
 ## Benchmarks (large files vs other libraries)
@@ -48,28 +49,29 @@ Sample **read** comparison — same workbook (**4000 × 120** numeric grid, **~4
 
 | API / library | Time (ms) | Peak RSS (MiB) |
 |---------------|-----------|----------------|
-| fast-xlsx `read_xlsx` (nested lists) | 246.0 | 114.6 |
-| fast-xlsx `load` + `read_sheet(0)` | 247.1 | 114.4 |
-| openpyxl read-only `iter_rows` | 587.1 | 39.0 |
-| python-calamine `to_python()` | 198.6 | 68.9 |
-| pandas `read_excel` (`engine="calamine"`) | 230.0 | 141.5 |
-| pandas `read_excel` (`engine="openpyxl"`) | 799.2 | 101.4 |
+| fast-xlsx `read_xlsx` (nested lists) | 236.3 | 114.7 |
+| fast-xlsx `iter_rows` (streaming; one row at a time) | 258.8 | 36.0 |
+| fast-xlsx `load` + `read_sheet(0)` | 241.0 | 114.6 |
+| openpyxl read-only `iter_rows` | 603.4 | 38.9 |
+| python-calamine `to_python()` | 196.0 | 68.9 |
+| pandas `read_excel` (`engine="calamine"`) | 228.2 | 141.4 |
+| pandas `read_excel` (`engine="openpyxl"`) | 812.6 | 101.5 |
 
 Sample **write** comparison — generating a **new** file of the same shape (numeric grid):
 
 | API / library | Time (ms) | Peak RSS (MiB) |
 |---------------|-----------|----------------|
-| fast-xlsx `StreamWriter` (row stream) | 296.7 | 15.6 |
-| fast-xlsx `write_xlsx` (grid in Python) | 270.4 | 70.6 |
-| XlsxWriter `constant_memory` | 818.3 | 24.3 |
+| fast-xlsx `StreamWriter` (row stream) | 298.3 | 15.6 |
+| fast-xlsx `write_xlsx` (grid in Python) | 273.0 | 70.7 |
+| XlsxWriter `constant_memory` | 829.9 | 24.3 |
 
-**How to interpret:** higher **peak RSS** usually means the API materialized a large object graph in Python (e.g. fast-xlsx and pandas building full structures). **openpyxl** in read-only mode streams rows, so RSS stays lower but wall time is higher here. **fast-xlsx** `StreamWriter` keeps RSS low; wall time vs **XlsxWriter** on this run favors the Rust path—re-run on your machine before choosing.
+**How to interpret:** higher **peak RSS** usually means the API materialized a large object graph in Python (e.g. `read_xlsx` building a nested list for every cell). **`iter_rows`** avoids holding the whole sheet in Python at once and, for row-based XML, avoids a full Rust grid—here RSS is in the same ballpark as **openpyxl** read-only with **much** lower wall time. **Legacy** sheets may still buffer like `read_xlsx`. Re-run `memory_timing.py` on your machine before choosing.
 
 For pytest micro-benchmarks (not RSS), see `pytest benchmarks/`.
 
 | Library | Read | Write | Excel feature surface |
 |---------|------|-------|------------------------|
-| **fast-xlsx** | Yes | Yes (`write_xlsx`, `StreamWriter`) | Values / basic cell types only (see Status above). |
+| **fast-xlsx** | Yes (`read_xlsx`, **`iter_rows`**) | Yes (`write_xlsx`, `StreamWriter`) | Values / basic cell types only (see Status above). |
 | **python-calamine** | Yes | No | Read-focused; Rust [calamine](https://github.com/tafia/calamine). |
 | **openpyxl** | Yes | Yes | Broad OOXML (styles, charts, …). |
 | **pandas** | Yes (`read_excel`) | Yes (`to_excel`, engine-dependent) | DataFrame-centric; uses engines above. |
@@ -100,12 +102,17 @@ assert wb.sheet_names[0] == "Sheet1"
 same = wb.read_sheet(0)
 sheet = wb["Sheet1"]
 rows = sheet.to_list()
+for row in wb.iter_rows("Sheet1"):
+    pass  # each row: list of None / bool / int / float / str
 
 fast_xlsx.write_xlsx("out.xlsx", [["a", 1], ["b", 2]], sheet="Data")
 
 with fast_xlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
     for i in range(1_000_000):
         w.write_row([i, f"row {i}"])
+
+for row in fast_xlsx.iter_rows("book.xlsx", "Data"):
+    pass
 ```
 
 ## License

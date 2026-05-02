@@ -78,6 +78,20 @@ fn read_sheet_grid_inner(data: &WorkbookData, worksheet_path: &str) -> Result<Ve
     parse_worksheet(reader, &data.shared_strings)
 }
 
+/// Inflated worksheet XML bytes (for resumable row streaming without holding the ZIP open).
+pub(crate) fn read_worksheet_inflated(data: &WorkbookData, worksheet_path: &str) -> Result<Vec<u8>> {
+    let mut guard = data
+        .archive
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut file = guard
+        .by_name(worksheet_path)
+        .map_err(|_| XlsxError::MissingEntry(worksheet_path.to_string()))?;
+    let mut buf = Vec::new();
+    std::io::Read::read_to_end(&mut file, &mut buf)?;
+    Ok(buf)
+}
+
 fn read_zip_entry_to_string(archive: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<String> {
     let mut file = archive
         .by_name(path)
@@ -394,7 +408,7 @@ fn parse_worksheet<R: BufRead>(input: R, shared_strings: &[Arc<str>]) -> Result<
     Ok(grid)
 }
 
-fn expand_dimension(dim: &str) -> Result<Option<(u32, u32)>> {
+pub(crate) fn expand_dimension(dim: &str) -> Result<Option<(u32, u32)>> {
     let dim = dim.trim();
     if dim.is_empty() {
         return Ok(None);
@@ -405,7 +419,7 @@ fn expand_dimension(dim: &str) -> Result<Option<(u32, u32)>> {
     Ok(Some((r, c)))
 }
 
-fn decode_cell_value(
+pub(crate) fn decode_cell_value(
     cell_type: &Option<String>,
     raw: &str,
     shared_strings: &[Arc<str>],
@@ -448,7 +462,7 @@ fn decode_cell_value(
     }
 }
 
-fn parse_cell_ref(r: &str) -> Result<(u32, u32)> {
+pub(crate) fn parse_cell_ref(r: &str) -> Result<(u32, u32)> {
     let r = r.trim();
     let mut col_part = String::new();
     let mut row_part = String::new();
@@ -475,7 +489,7 @@ fn parse_cell_ref(r: &str) -> Result<(u32, u32)> {
     Ok((row - 1, col))
 }
 
-fn col_letters_to_zero_based(letters: &str) -> Result<u32> {
+pub(crate) fn col_letters_to_zero_based(letters: &str) -> Result<u32> {
     let mut col: u32 = 0;
     for b in letters.bytes() {
         let c = b.to_ascii_uppercase();
@@ -490,7 +504,7 @@ fn col_letters_to_zero_based(letters: &str) -> Result<u32> {
     Ok(col - 1)
 }
 
-fn attr_value(
+pub(crate) fn attr_value(
     e: &quick_xml::events::BytesStart<'_>,
     key: &str,
     reader: &Reader<impl std::io::BufRead>,
@@ -504,7 +518,7 @@ fn attr_value(
     None
 }
 
-fn local_name(name: QName) -> String {
+pub(crate) fn local_name(name: QName) -> String {
     let raw = String::from_utf8_lossy(name.as_ref());
     if let Some(i) = raw.rfind('}') {
         raw[i + 1..].to_string()

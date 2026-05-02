@@ -3,6 +3,7 @@ Run in a fresh interpreter (subprocess) so `resource.ru_maxrss` reflects that wo
 
 Usage:
   python memory_worker.py read <path>
+  python memory_worker.py iter_rows <path>
   python memory_worker.py load_read <path>
   python memory_worker.py openpyxl_read <path>
   python memory_worker.py calamine_read <path>
@@ -37,6 +38,14 @@ def main() -> None:
 
         t0 = time.perf_counter()
         fast_xlsx.read_xlsx(path)
+        ms = (time.perf_counter() - t0) * 1000.0
+    elif mode == "iter_rows":
+        path = sys.argv[2]
+        import fast_xlsx
+
+        t0 = time.perf_counter()
+        for _ in fast_xlsx.iter_rows(path):
+            pass
         ms = (time.perf_counter() - t0) * 1000.0
     elif mode == "load_read":
         path = sys.argv[2]

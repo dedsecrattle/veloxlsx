@@ -74,6 +74,7 @@ def main() -> None:
     path_s = str(input_path)
     read_cases: list[tuple[str, str, list[str]]] = [
         ("fast-xlsx `read_xlsx` (nested lists)", "read", [path_s]),
+        ("fast-xlsx `iter_rows` (streaming; one row at a time)", "iter_rows", [path_s]),
         ("fast-xlsx `load` + `read_sheet(0)`", "load_read", [path_s]),
         ("openpyxl read-only `iter_rows`", "openpyxl_read", [path_s]),
         ("python-calamine `to_python()`", "calamine_read", [path_s]),
