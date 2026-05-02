@@ -19,6 +19,9 @@ pip-wheel-metadata/
 wheels/
 *.whl
 
+# Local benchmark artifacts
+.bench_memory_tmp/
+
 # Pytest / coverage
 .pytest_cache/
 .coverage

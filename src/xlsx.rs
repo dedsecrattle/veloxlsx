@@ -5,7 +5,9 @@ use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
+use std::io::{BufRead, Cursor, Read};
+use std::sync::Arc;
+use std::sync::Mutex;
 use zip::ZipArchive;
 
 #[derive(Clone, Debug)]
@@ -20,26 +22,28 @@ pub enum CellValue {
     Empty,
     Bool(bool),
     Number(f64),
-    Text(String),
+    Text(Arc<str>),
 }
 
 pub struct WorkbookData {
-    pub zip_bytes: Vec<u8>,
+    archive: Mutex<ZipArchive<Cursor<Vec<u8>>>>,
     pub sheets: Vec<SheetInfo>,
-    pub shared_strings: Vec<String>,
+    pub shared_strings: Vec<Arc<str>>,
 }
 
 pub fn read_file_bytes(path: &std::path::Path) -> Result<Vec<u8>> {
     Ok(std::fs::read(path)?)
 }
 
-pub fn parse_workbook(zip_bytes: &[u8]) -> Result<WorkbookData> {
-    let mut archive = ZipArchive::new(Cursor::new(zip_bytes))?;
+/// Parses the workbook and keeps a single ZIP archive open for subsequent sheet reads.
+pub fn parse_workbook(zip_bytes: Vec<u8>) -> Result<WorkbookData> {
+    let cursor = Cursor::new(zip_bytes);
+    let mut archive = ZipArchive::new(cursor)?;
     let rels = read_workbook_rels(&mut archive)?;
     let (sheet_infos, _defined_names_skipped) = read_workbook_xml(&mut archive, &rels)?;
     let shared_strings = read_shared_strings(&mut archive)?;
     Ok(WorkbookData {
-        zip_bytes: zip_bytes.to_vec(),
+        archive: Mutex::new(archive),
         sheets: sheet_infos,
         shared_strings,
     })
@@ -50,7 +54,7 @@ pub fn read_sheet_grid(data: &WorkbookData, sheet_index: usize) -> Result<Vec<Ve
         .sheets
         .get(sheet_index)
         .ok_or_else(|| XlsxError::InvalidWorkbook("sheet index out of range".into()))?;
-    read_worksheet_grid(&data.zip_bytes, info.path.as_str(), &data.shared_strings)
+    read_sheet_grid_inner(data, info.path.as_str())
 }
 
 pub fn read_sheet_grid_by_name(data: &WorkbookData, name: &str) -> Result<Vec<Vec<CellValue>>> {
@@ -62,7 +66,19 @@ pub fn read_sheet_grid_by_name(data: &WorkbookData, name: &str) -> Result<Vec<Ve
     read_sheet_grid(data, idx)
 }
 
-fn read_zip_entry_to_string(archive: &mut ZipArchive<Cursor<&[u8]>>, path: &str) -> Result<String> {
+fn read_sheet_grid_inner(data: &WorkbookData, worksheet_path: &str) -> Result<Vec<Vec<CellValue>>> {
+    let mut guard = data
+        .archive
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let file = guard
+        .by_name(worksheet_path)
+        .map_err(|_| XlsxError::MissingEntry(worksheet_path.to_string()))?;
+    let reader = std::io::BufReader::new(file);
+    parse_worksheet(reader, &data.shared_strings)
+}
+
+fn read_zip_entry_to_string(archive: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<String> {
     let mut file = archive
         .by_name(path)
         .map_err(|_| XlsxError::MissingEntry(path.to_string()))?;
@@ -71,7 +87,7 @@ fn read_zip_entry_to_string(archive: &mut ZipArchive<Cursor<&[u8]>>, path: &str)
     Ok(s)
 }
 
-fn read_workbook_rels(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<HashMap<String, String>> {
+fn read_workbook_rels(archive: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<HashMap<String, String>> {
     let xml = read_zip_entry_to_string(archive, "xl/_rels/workbook.xml.rels")?;
     parse_relationships(&xml)
 }
@@ -149,7 +165,7 @@ fn push_sheet_from_element(
 }
 
 fn read_workbook_xml(
-    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    archive: &mut ZipArchive<Cursor<Vec<u8>>>,
     rels: &HashMap<String, String>,
 ) -> Result<(Vec<SheetInfo>, ())> {
     let xml = read_zip_entry_to_string(archive, "xl/workbook.xml")?;
@@ -189,7 +205,7 @@ fn read_workbook_xml(
     Ok((sheets, ()))
 }
 
-fn read_shared_strings(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<String>> {
+fn read_shared_strings(archive: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<Vec<Arc<str>>> {
     let xml = match read_zip_entry_to_string(archive, "xl/sharedStrings.xml") {
         Ok(s) => s,
         Err(XlsxError::MissingEntry(_)) => return Ok(Vec::new()),
@@ -198,13 +214,12 @@ fn read_shared_strings(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<St
     parse_shared_strings(&xml)
 }
 
-fn parse_shared_strings(xml: &str) -> Result<Vec<String>> {
+fn parse_shared_strings(xml: &str) -> Result<Vec<Arc<str>>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut out = Vec::new();
     let mut in_si = false;
-    // Depth of `<t>` elements inside the current `<si>` (rich text may contain many).
     let mut t_depth: u32 = 0;
     let mut current = String::new();
 
@@ -230,7 +245,7 @@ fn parse_shared_strings(xml: &str) -> Result<Vec<String>> {
                 if ln == "t" && in_si && t_depth > 0 {
                     t_depth -= 1;
                 } else if ln == "si" {
-                    out.push(std::mem::take(&mut current));
+                    out.push(Arc::from(current.as_str()));
                     in_si = false;
                     t_depth = 0;
                 }
@@ -244,18 +259,8 @@ fn parse_shared_strings(xml: &str) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn read_worksheet_grid(
-    zip_bytes: &[u8],
-    worksheet_path: &str,
-    shared_strings: &[String],
-) -> Result<Vec<Vec<CellValue>>> {
-    let mut archive = ZipArchive::new(Cursor::new(zip_bytes))?;
-    let xml = read_zip_entry_to_string(&mut archive, worksheet_path)?;
-    parse_worksheet(&xml, shared_strings)
-}
-
-fn parse_worksheet(xml: &str, shared_strings: &[String]) -> Result<Vec<Vec<CellValue>>> {
-    let mut reader = Reader::from_str(xml);
+fn parse_worksheet<R: BufRead>(input: R, shared_strings: &[Arc<str>]) -> Result<Vec<Vec<CellValue>>> {
+    let mut reader = Reader::from_reader(input);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
 
@@ -312,7 +317,6 @@ fn parse_worksheet(xml: &str, shared_strings: &[String]) -> Result<Vec<Vec<CellV
                     };
                     max_row = max_row.max(row);
                     max_col = max_col.max(col);
-                    // Empty cell tag with no children
                     cells.insert((row, col), CellValue::Empty);
                     let _ = ct;
                 }
@@ -348,7 +352,8 @@ fn parse_worksheet(xml: &str, shared_strings: &[String]) -> Result<Vec<Vec<CellV
                     let (row, col) = parse_cell_ref(&cref)?;
                     max_row = max_row.max(row);
                     max_col = max_col.max(col);
-                    let val = CellValue::Text(std::mem::take(&mut text_buf));
+                    let val = CellValue::Text(Arc::from(text_buf.as_str()));
+                    text_buf.clear();
                     cells.insert((row, col), val);
                     cell_value_written = true;
                     in_is = false;
@@ -403,7 +408,7 @@ fn expand_dimension(dim: &str) -> Result<Option<(u32, u32)>> {
 fn decode_cell_value(
     cell_type: &Option<String>,
     raw: &str,
-    shared_strings: &[String],
+    shared_strings: &[Arc<str>],
 ) -> Result<CellValue> {
     let trimmed = raw.trim();
     match cell_type.as_deref() {
@@ -411,29 +416,33 @@ fn decode_cell_value(
             let idx: usize = trimmed
                 .parse()
                 .map_err(|_| XlsxError::InvalidNumber(trimmed.to_string()))?;
-            let s = shared_strings.get(idx).cloned().unwrap_or_default();
+            let s = shared_strings
+                .get(idx)
+                .map(Arc::clone)
+                .unwrap_or_else(|| Arc::from(""));
             Ok(CellValue::Text(s))
         }
-        Some("inlineStr") => Ok(CellValue::Text(trimmed.to_string())),
+        Some("inlineStr") => Ok(CellValue::Text(Arc::from(trimmed))),
         Some("b") => Ok(CellValue::Bool(
             trimmed != "0" && !trimmed.eq_ignore_ascii_case("false"),
         )),
-        Some("e") => Ok(CellValue::Text(format!("#ERROR:{trimmed}"))),
+        Some("e") => Ok(CellValue::Text(Arc::from(format!("#ERROR:{trimmed}").into_boxed_str()))),
         Some("str") | Some("n") | None => {
             if trimmed.is_empty() {
                 Ok(CellValue::Empty)
             } else if let Ok(n) = trimmed.parse::<f64>() {
                 Ok(CellValue::Number(n))
             } else {
-                Ok(CellValue::Text(trimmed.to_string()))
+                Ok(CellValue::Text(Arc::from(trimmed)))
             }
         }
         Some(other) => {
-            // Unknown type: best-effort number then text
             if let Ok(n) = trimmed.parse::<f64>() {
                 Ok(CellValue::Number(n))
             } else {
-                Ok(CellValue::Text(format!("[{other}]{trimmed}")))
+                Ok(CellValue::Text(Arc::from(
+                    format!("[{other}]{trimmed}").into_boxed_str(),
+                )))
             }
         }
     }
@@ -484,7 +493,7 @@ fn col_letters_to_zero_based(letters: &str) -> Result<u32> {
 fn attr_value(
     e: &quick_xml::events::BytesStart<'_>,
     key: &str,
-    reader: &Reader<&[u8]>,
+    reader: &Reader<impl std::io::BufRead>,
 ) -> Option<String> {
     for a in e.attributes().flatten() {
         let k = reader.decoder().decode(a.key.as_ref()).unwrap_or_default();
@@ -496,7 +505,6 @@ fn attr_value(
 }
 
 fn local_name(name: QName) -> String {
-    // Strip namespace prefix if present: `{uri}local` -> `local`
     let raw = String::from_utf8_lossy(name.as_ref());
     if let Some(i) = raw.rfind('}') {
         raw[i + 1..].to_string()

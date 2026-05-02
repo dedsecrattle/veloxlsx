@@ -1,10 +1,11 @@
 mod error;
+mod write;
 mod xlsx;
 
 use error::XlsxError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAnyMethods, PyList, PyModule};
+use pyo3::types::{PyAnyMethods, PyBool, PyList, PyModule, PyString};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -18,6 +19,11 @@ struct PySheet {
     workbook: Arc<xlsx::WorkbookData>,
     index: usize,
     name: String,
+}
+
+#[pyclass(name = "StreamWriter")]
+struct PyStreamWriter {
+    inner: Option<write::StreamingWriter>,
 }
 
 #[pymethods]
@@ -89,6 +95,54 @@ impl PySheet {
     }
 }
 
+#[pymethods]
+impl PyStreamWriter {
+    #[new]
+    #[pyo3(signature = (path, sheet_name=None))]
+    fn new(path: PathBuf, sheet_name: Option<String>) -> PyResult<Self> {
+        let name = sheet_name.unwrap_or_else(|| "Sheet1".to_string());
+        let w = write::StreamingWriter::create(&path, &name).map_err(py_err)?;
+        Ok(Self { inner: Some(w) })
+    }
+
+    fn write_row(&mut self, py: Python<'_>, row: Bound<'_, PyAny>) -> PyResult<()> {
+        let inner = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| PyValueError::new_err("StreamWriter already closed"))?;
+        let cells = py_row_to_vec(py, &row)?;
+        inner.write_row(&cells).map_err(py_err)
+    }
+
+    fn close(&mut self) -> PyResult<()> {
+        if let Some(mut w) = self.inner.take() {
+            w.finish().map_err(py_err)?;
+        }
+        Ok(())
+    }
+
+    fn __enter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __exit__(
+        mut slf: PyRefMut<'_, Self>,
+        _exc_type: Bound<'_, PyAny>,
+        _exc: Bound<'_, PyAny>,
+        _tb: Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        slf.close()
+    }
+}
+
+impl Drop for PyStreamWriter {
+    fn drop(&mut self) {
+        if let Some(mut w) = self.inner.take() {
+            let _ = w.finish();
+        }
+    }
+}
+
 fn grid_to_py(py: Python<'_>, grid: &[Vec<xlsx::CellValue>]) -> PyResult<Py<PyAny>> {
     let rows = PyList::empty(py);
     for row in grid {
@@ -106,8 +160,49 @@ fn cell_value_to_py(py: Python<'_>, v: &xlsx::CellValue) -> PyResult<Py<PyAny>> 
         xlsx::CellValue::Empty => Ok(py.None()),
         xlsx::CellValue::Bool(b) => Ok(b.into_pyobject(py)?.to_owned().into_any().unbind()),
         xlsx::CellValue::Number(n) => Ok(n.into_pyobject(py)?.to_owned().into_any().unbind()),
-        xlsx::CellValue::Text(s) => Ok(s.into_pyobject(py)?.to_owned().into_any().unbind()),
+        xlsx::CellValue::Text(s) => {
+            Ok(PyString::new(py, s.as_ref()).into_any().unbind())
+        }
     }
+}
+
+fn py_row_to_vec(py: Python<'_>, row: &Bound<'_, PyAny>) -> PyResult<Vec<xlsx::CellValue>> {
+    let list = row.downcast::<PyList>()?;
+    let mut r = Vec::with_capacity(list.len());
+    for cell in list.iter() {
+        r.push(py_to_cell(py, &cell)?);
+    }
+    Ok(r)
+}
+
+fn py_to_grid(py: Python<'_>, rows: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<xlsx::CellValue>>> {
+    let list = rows.downcast::<PyList>()?;
+    let mut out = Vec::with_capacity(list.len());
+    for item in list.iter() {
+        out.push(py_row_to_vec(py, &item)?);
+    }
+    Ok(out)
+}
+
+fn py_to_cell(_py: Python<'_>, cell: &Bound<'_, PyAny>) -> PyResult<xlsx::CellValue> {
+    if cell.is_none() {
+        return Ok(xlsx::CellValue::Empty);
+    }
+    if cell.is_instance_of::<PyBool>() {
+        return Ok(xlsx::CellValue::Bool(cell.extract()?));
+    }
+    if let Ok(i) = cell.extract::<i64>() {
+        return Ok(xlsx::CellValue::Number(i as f64));
+    }
+    if let Ok(f) = cell.extract::<f64>() {
+        return Ok(xlsx::CellValue::Number(f));
+    }
+    if let Ok(s) = cell.extract::<String>() {
+        return Ok(xlsx::CellValue::Text(Arc::from(s.into_boxed_str())));
+    }
+    Err(PyValueError::new_err(
+        "cell must be None, bool, int, float, or str",
+    ))
 }
 
 fn py_err(e: XlsxError) -> PyErr {
@@ -122,7 +217,7 @@ fn read_xlsx(
     sheet: Option<Bound<'_, PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     let bytes = xlsx::read_file_bytes(&path).map_err(py_err)?;
-    let wb = xlsx::parse_workbook(&bytes).map_err(py_err)?;
+    let wb = xlsx::parse_workbook(bytes).map_err(py_err)?;
     let grid = match sheet {
         None => xlsx::read_sheet_grid(&wb, 0).map_err(py_err)?,
         Some(s) => {
@@ -144,9 +239,22 @@ fn read_xlsx(
 }
 
 #[pyfunction]
+#[pyo3(signature = (path, rows, sheet=None))]
+fn write_xlsx(
+    py: Python<'_>,
+    path: PathBuf,
+    rows: Bound<'_, PyAny>,
+    sheet: Option<String>,
+) -> PyResult<()> {
+    let grid = py_to_grid(py, &rows)?;
+    let name = sheet.unwrap_or_else(|| "Sheet1".to_string());
+    write::write_xlsx(&path, &name, &grid).map_err(py_err)
+}
+
+#[pyfunction]
 fn load(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyWorkbook>> {
     let bytes = xlsx::read_file_bytes(&path).map_err(py_err)?;
-    let data = xlsx::parse_workbook(&bytes).map_err(py_err)?;
+    let data = xlsx::parse_workbook(bytes).map_err(py_err)?;
     Py::new(
         py,
         PyWorkbook {
@@ -159,7 +267,9 @@ fn load(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyWorkbook>> {
 fn fast_xlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWorkbook>()?;
     m.add_class::<PySheet>()?;
+    m.add_class::<PyStreamWriter>()?;
     m.add_function(wrap_pyfunction!(read_xlsx, m)?)?;
+    m.add_function(wrap_pyfunction!(write_xlsx, m)?)?;
     m.add_function(wrap_pyfunction!(load, m)?)?;
 
     Ok(())
