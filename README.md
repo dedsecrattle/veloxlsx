@@ -1,5 +1,10 @@
 # veloxlsx
 
+[![PyPI Version](https://img.shields.io/pypi/v/veloxlsx)](https://pypi.org/project/veloxlsx/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/veloxlsx)](https://pypi.org/project/veloxlsx/)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](LICENSE-APACHE)
+[![Documentation](https://img.shields.io/badge/docs-github--pages-blue)](https://dedsecrattle.github.io/fast-xlsx/)
+
 Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks. The goal is **read speed** and a small, typed surface area while the format support grows.
 
 **Install:** `pip install veloxlsx`, then **`import veloxlsx`**.
@@ -79,7 +84,15 @@ For pytest micro-benchmarks (not RSS), see `pytest benchmarks/`.
 | **pandas** | Yes (`read_excel`) | Yes (`to_excel`, engine-dependent) | DataFrame-centric; uses engines above. |
 | **XlsxWriter** | No | Yes | Write-only; rich writing features. |
 
-## Install (from source)
+## Installation
+
+### From PyPI
+
+```bash
+pip install veloxlsx
+```
+
+### From Source
 
 Requires Rust, Python 3.10+, and [maturin](https://www.maturin.rs/).
 
@@ -90,42 +103,57 @@ pip install maturin
 maturin develop --extras dev
 ```
 
-### Typing (Pyright, mypy, …)
-
-The wheel / editable install is **PEP 561**–aware (`py.typed` plus [`python/veloxlsx/__init__.pyi`](python/veloxlsx/__init__.pyi)). The native module is `veloxlsx._native`; import the public API from **`veloxlsx`**. Runtime aliases **`CellValue`**, **`Row`**, and **`Grid`** match the stubs:
-
-```python
-from veloxlsx import CellValue, Grid, Row, read_xlsx
-
-def f(rows: Grid) -> list[Row]:
-    return [list(r) for r in rows]
-```
-
 ## Usage
+
+### Reading XLSX Files
 
 ```python
 import veloxlsx
 
+# Read entire sheet as nested lists
 grid = veloxlsx.read_xlsx("book.xlsx")  # first sheet
 grid = veloxlsx.read_xlsx("book.xlsx", "Sheet2")
 grid = veloxlsx.read_xlsx("book.xlsx", 0)
 
+# Load workbook for multiple operations
 wb = veloxlsx.load("book.xlsx")
 assert wb.sheet_names[0] == "Sheet1"
 same = wb.read_sheet(0)
 sheet = wb["Sheet1"]
 rows = sheet.to_list()
+
+# Stream rows one at a time (memory efficient)
 for row in wb.iter_rows("Sheet1"):
     pass  # each row: list of None / bool / int / float / str
 
+# Streaming read from file
+for row in veloxlsx.iter_rows("book.xlsx", "Data"):
+    pass
+```
+
+### Writing XLSX Files
+
+```python
+import veloxlsx
+
+# Write entire grid at once
 veloxlsx.write_xlsx("out.xlsx", [["a", 1], ["b", 2]], sheet="Data")
 
+# Stream rows for large files (memory efficient)
 with veloxlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
     for i in range(1_000_000):
         w.write_row([i, f"row {i}"])
+```
 
-for row in veloxlsx.iter_rows("book.xlsx", "Data"):
-    pass
+### Type Annotations
+
+The package includes full type hints (PEP 561). Use the public API for proper type checking:
+
+```python
+from veloxlsx import CellValue, Grid, Row, read_xlsx
+
+def process_rows(rows: Grid) -> list[Row]:
+    return [list(r) for r in rows]
 ```
 
 ## License

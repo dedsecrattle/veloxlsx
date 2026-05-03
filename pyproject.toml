@@ -28,6 +28,11 @@ dev = [
   "python-calamine>=0.5",
   "xlsxwriter>=3.1",
 ]
+docs = [
+  "sphinx>=7.0.0",
+  "sphinx-furo>=2024.0.0",
+  "sphinx-autodoc-typehints>=2.0.0",
+]
 
 [tool.maturin]
 # Native code is ``veloxlsx._native``; ``veloxlsx`` package re-exports and ships stubs (PEP 561).
