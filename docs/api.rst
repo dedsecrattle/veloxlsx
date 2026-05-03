@@ -1,11 +1,6 @@
 API Reference
 =============
 
-.. automodule:: veloxlsx
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Classes
 -------
 

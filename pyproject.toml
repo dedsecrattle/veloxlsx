@@ -29,7 +29,7 @@ dev = [
   "xlsxwriter>=3.1",
 ]
 docs = [
-  "sphinx>=7.0.0",
+  "sphinx>=7.0.0,<8.0.0",
   "furo>=2024.0.0",
   "sphinx-autodoc-typehints>=2.0.0",
 ]
