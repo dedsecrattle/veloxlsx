@@ -30,6 +30,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",
+    "sphinx.ext.graphviz",
 ]
 
 templates_path = ["_templates"]

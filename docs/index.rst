@@ -10,6 +10,7 @@ The goal is **read speed** and a small, typed surface area while the format supp
 
    installation
    usage
+   architecture
    api
 
 Installation

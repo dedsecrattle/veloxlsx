@@ -27,11 +27,13 @@ dev = [
   "pandas>=2.2",
   "python-calamine>=0.5",
   "xlsxwriter>=3.1",
+  "matplotlib>=3.7",
 ]
 docs = [
   "sphinx>=7.0.0,<8.0.0",
   "furo>=2024.0.0",
   "sphinx-autodoc-typehints>=2.0.0",
+  "graphviz",
 ]
 
 [tool.maturin]
