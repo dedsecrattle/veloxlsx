@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-import fast_xlsx
+import veloxlsx
 
 
 def test_read_xlsx_first_sheet(sample_xlsx_path: Path) -> None:
-    grid = fast_xlsx.read_xlsx(sample_xlsx_path)
+    grid = veloxlsx.read_xlsx(sample_xlsx_path)
     assert grid[0][0] == "hello"
     assert grid[0][1] == 42.5
     assert grid[0][2] is True
@@ -17,17 +17,17 @@ def test_read_xlsx_first_sheet(sample_xlsx_path: Path) -> None:
 
 
 def test_read_xlsx_by_sheet_name(sample_xlsx_path: Path) -> None:
-    grid = fast_xlsx.read_xlsx(sample_xlsx_path, "Data")
+    grid = veloxlsx.read_xlsx(sample_xlsx_path, "Data")
     assert grid[0][0] == "hello"
 
 
 def test_read_xlsx_by_sheet_index(sample_xlsx_path: Path) -> None:
-    assert fast_xlsx.read_xlsx(sample_xlsx_path, 0)[0][0] == "hello"
-    assert fast_xlsx.read_xlsx(sample_xlsx_path, -1)[0][0] == "hello"
+    assert veloxlsx.read_xlsx(sample_xlsx_path, 0)[0][0] == "hello"
+    assert veloxlsx.read_xlsx(sample_xlsx_path, -1)[0][0] == "hello"
 
 
 def test_load_workbook_and_sheet(sample_xlsx_path: Path) -> None:
-    wb = fast_xlsx.load(sample_xlsx_path)
+    wb = veloxlsx.load(sample_xlsx_path)
     assert wb.sheet_names == ["Data"]
     assert wb.read_sheet("Data")[0][0] == "hello"
     sheet = wb["Data"]
@@ -36,7 +36,7 @@ def test_load_workbook_and_sheet(sample_xlsx_path: Path) -> None:
 
 
 def test_inline_string_roundtrip(inline_str_xlsx_path: Path) -> None:
-    grid = fast_xlsx.read_xlsx(inline_str_xlsx_path)
+    grid = veloxlsx.read_xlsx(inline_str_xlsx_path)
     assert grid[0][0] == "inline text here"
 
 
@@ -47,7 +47,7 @@ def test_openpyxl_parity(sample_xlsx_path: Path) -> None:
 
     wb = load_workbook(sample_xlsx_path, data_only=True)
     ws = wb["Data"]
-    rust = fast_xlsx.read_xlsx(sample_xlsx_path, "Data")
+    rust = veloxlsx.read_xlsx(sample_xlsx_path, "Data")
     for r, row in enumerate(rust, start=1):
         for c, value in enumerate(row, start=1):
             expected = ws.cell(row=r, column=c).value

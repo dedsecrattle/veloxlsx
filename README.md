@@ -1,6 +1,8 @@
-# fast-xlsx
+# veloxlsx
 
 Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks. The goal is **read speed** and a small, typed surface area while the format support grows.
+
+**Install:** `pip install veloxlsx`, then **`import veloxlsx`**.
 
 ## Status (Phase 1)
 
@@ -11,9 +13,9 @@ Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks
 
 ## Phase 2 — write + faster read
 
-- **`fast_xlsx.write_xlsx(path, rows, sheet=...)`** — single-sheet writer with **shared-string deduplication** (memory scales with *unique* strings, not cell count).
-- **`fast_xlsx.StreamWriter(path, sheet_name=...)`** — **streaming** writer: call `write_row([...])` repeatedly; uses **inline strings** so memory stays bounded (no giant SST while writing). Supports `with` / `close()`.
-- **`fast_xlsx.iter_rows(path, sheet=...)`**, **`Workbook.iter_rows(...)`**, **`Sheet.iter_rows()`** — **streaming read** on the Python side: yields **one row at a time** (each row is a `list` of cell values). For typical workbooks whose cells are wrapped in `<row>` (Excel, XlsxWriter, OpenPyxl), Rust does **not** build a full `rows × cols` grid in memory; peak RSS stays much lower than `read_xlsx`. Sheets that need a **legacy** sparse layout (cells not under `<row>`) fall back internally to buffering like `read_xlsx`.
+- **`veloxlsx.write_xlsx(path, rows, sheet=...)`** — single-sheet writer with **shared-string deduplication** (memory scales with *unique* strings, not cell count).
+- **`veloxlsx.StreamWriter(path, sheet_name=...)`** — **streaming** writer: call `write_row([...])` repeatedly; uses **inline strings** so memory stays bounded (no giant SST while writing). Supports `with` / `close()`.
+- **`veloxlsx.iter_rows(path, sheet=...)`**, **`Workbook.iter_rows(...)`**, **`Sheet.iter_rows()`** — **streaming read** on the Python side: yields **one row at a time** (each row is a `list` of cell values). For typical workbooks whose cells are wrapped in `<row>` (Excel, XlsxWriter, OpenPyxl), Rust does **not** build a full `rows × cols` grid in memory; peak RSS stays much lower than `read_xlsx`. Sheets that need a **legacy** sparse layout (cells not under `<row>`) fall back internally to buffering like `read_xlsx`.
 - **Read path**: one **ZIP archive** is opened during `load()` / `parse_workbook` and **reused** for every sheet read; worksheet XML is parsed from the zip entry stream (no full-sheet `String`). Shared string table entries use **`Arc<str>`** so repeated values clone a pointer, not the text.
 
 ## Benchmarks (large files vs other libraries)
@@ -29,7 +31,7 @@ pytest benchmarks/
 Grid size (defaults **4000 × 120** cells ≈ **480k** values):
 
 ```bash
-FAST_XLSX_BENCH_ROWS=10000 FAST_XLSX_BENCH_COLS=200 pytest benchmarks/
+VELOXLSX_BENCH_ROWS=10000 VELOXLSX_BENCH_COLS=200 pytest benchmarks/
 ```
 
 The workbook is generated with **xlsxwriter** (fast streaming write) so you are mostly measuring **read** performance, not fixture build time after the first module-scoped write.
@@ -42,16 +44,16 @@ The workbook is generated with **xlsxwriter** (fast streaming write) so you are 
 maturin develop --release
 pip install -e ".[dev]"
 python benchmarks/memory_timing.py
-# optional: FAST_XLSX_BENCH_ROWS=10000 FAST_XLSX_BENCH_COLS=200 python benchmarks/memory_timing.py
+# optional: VELOXLSX_BENCH_ROWS=10000 VELOXLSX_BENCH_COLS=200 python benchmarks/memory_timing.py
 ```
 
-Sample **read** comparison — same workbook (**4000 × 120** numeric grid, **~480k** cells); **macOS arm64**, **Python 3.13**, **release** `fast-xlsx`, April 2026. Numbers are **indicative** (OS/CPU/RAM/Python build change them).
+Sample **read** comparison — same workbook (**4000 × 120** numeric grid, **~480k** cells); **macOS arm64**, **Python 3.13**, **release** `veloxlsx`, April 2026. Numbers are **indicative** (OS/CPU/RAM/Python build change them).
 
 | API / library | Time (ms) | Peak RSS (MiB) |
 |---------------|-----------|----------------|
-| fast-xlsx `read_xlsx` (nested lists) | 236.3 | 114.7 |
-| fast-xlsx `iter_rows` (streaming; one row at a time) | 258.8 | 36.0 |
-| fast-xlsx `load` + `read_sheet(0)` | 241.0 | 114.6 |
+| veloxlsx `read_xlsx` (nested lists) | 236.3 | 114.7 |
+| veloxlsx `iter_rows` (streaming; one row at a time) | 258.8 | 36.0 |
+| veloxlsx `load` + `read_sheet(0)` | 241.0 | 114.6 |
 | openpyxl read-only `iter_rows` | 603.4 | 38.9 |
 | python-calamine `to_python()` | 196.0 | 68.9 |
 | pandas `read_excel` (`engine="calamine"`) | 228.2 | 141.4 |
@@ -61,8 +63,8 @@ Sample **write** comparison — generating a **new** file of the same shape (num
 
 | API / library | Time (ms) | Peak RSS (MiB) |
 |---------------|-----------|----------------|
-| fast-xlsx `StreamWriter` (row stream) | 298.3 | 15.6 |
-| fast-xlsx `write_xlsx` (grid in Python) | 273.0 | 70.7 |
+| veloxlsx `StreamWriter` (row stream) | 298.3 | 15.6 |
+| veloxlsx `write_xlsx` (grid in Python) | 273.0 | 70.7 |
 | XlsxWriter `constant_memory` | 829.9 | 24.3 |
 
 **How to interpret:** higher **peak RSS** usually means the API materialized a large object graph in Python (e.g. `read_xlsx` building a nested list for every cell). **`iter_rows`** avoids holding the whole sheet in Python at once and, for row-based XML, avoids a full Rust grid—here RSS is in the same ballpark as **openpyxl** read-only with **much** lower wall time. **Legacy** sheets may still buffer like `read_xlsx`. Re-run `memory_timing.py` on your machine before choosing.
@@ -71,7 +73,7 @@ For pytest micro-benchmarks (not RSS), see `pytest benchmarks/`.
 
 | Library | Read | Write | Excel feature surface |
 |---------|------|-------|------------------------|
-| **fast-xlsx** | Yes (`read_xlsx`, **`iter_rows`**) | Yes (`write_xlsx`, `StreamWriter`) | Values / basic cell types only (see Status above). |
+| **veloxlsx** | Yes (`read_xlsx`, **`iter_rows`**) | Yes (`write_xlsx`, `StreamWriter`) | Values / basic cell types only (see Status above). |
 | **python-calamine** | Yes | No | Read-focused; Rust [calamine](https://github.com/tafia/calamine). |
 | **openpyxl** | Yes | Yes | Broad OOXML (styles, charts, …). |
 | **pandas** | Yes (`read_excel`) | Yes (`to_excel`, engine-dependent) | DataFrame-centric; uses engines above. |
@@ -90,10 +92,10 @@ maturin develop --extras dev
 
 ### Typing (Pyright, mypy, …)
 
-The wheel / editable install is **PEP 561**–aware (`py.typed` plus [`python/fast_xlsx/__init__.pyi`](python/fast_xlsx/__init__.pyi)). The native module is `fast_xlsx._native`; import the public API from **`fast_xlsx`**. Runtime aliases **`CellValue`**, **`Row`**, and **`Grid`** match the stubs:
+The wheel / editable install is **PEP 561**–aware (`py.typed` plus [`python/veloxlsx/__init__.pyi`](python/veloxlsx/__init__.pyi)). The native module is `veloxlsx._native`; import the public API from **`veloxlsx`**. Runtime aliases **`CellValue`**, **`Row`**, and **`Grid`** match the stubs:
 
 ```python
-from fast_xlsx import CellValue, Grid, Row, read_xlsx
+from veloxlsx import CellValue, Grid, Row, read_xlsx
 
 def f(rows: Grid) -> list[Row]:
     return [list(r) for r in rows]
@@ -102,13 +104,13 @@ def f(rows: Grid) -> list[Row]:
 ## Usage
 
 ```python
-import fast_xlsx
+import veloxlsx
 
-grid = fast_xlsx.read_xlsx("book.xlsx")  # first sheet
-grid = fast_xlsx.read_xlsx("book.xlsx", "Sheet2")
-grid = fast_xlsx.read_xlsx("book.xlsx", 0)
+grid = veloxlsx.read_xlsx("book.xlsx")  # first sheet
+grid = veloxlsx.read_xlsx("book.xlsx", "Sheet2")
+grid = veloxlsx.read_xlsx("book.xlsx", 0)
 
-wb = fast_xlsx.load("book.xlsx")
+wb = veloxlsx.load("book.xlsx")
 assert wb.sheet_names[0] == "Sheet1"
 same = wb.read_sheet(0)
 sheet = wb["Sheet1"]
@@ -116,13 +118,13 @@ rows = sheet.to_list()
 for row in wb.iter_rows("Sheet1"):
     pass  # each row: list of None / bool / int / float / str
 
-fast_xlsx.write_xlsx("out.xlsx", [["a", 1], ["b", 2]], sheet="Data")
+veloxlsx.write_xlsx("out.xlsx", [["a", 1], ["b", 2]], sheet="Data")
 
-with fast_xlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
+with veloxlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
     for i in range(1_000_000):
         w.write_row([i, f"row {i}"])
 
-for row in fast_xlsx.iter_rows("book.xlsx", "Data"):
+for row in veloxlsx.iter_rows("book.xlsx", "Data"):
     pass
 ```
 

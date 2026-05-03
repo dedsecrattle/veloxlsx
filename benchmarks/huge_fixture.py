@@ -7,11 +7,11 @@ from pathlib import Path
 
 
 def bench_rows() -> int:
-    return max(50, int(os.environ.get("FAST_XLSX_BENCH_ROWS", "4000")))
+    return max(50, int(os.environ.get("VELOXLSX_BENCH_ROWS", "4000")))
 
 
 def bench_cols() -> int:
-    return max(10, int(os.environ.get("FAST_XLSX_BENCH_COLS", "120")))
+    return max(10, int(os.environ.get("VELOXLSX_BENCH_COLS", "120")))
 
 
 def write_huge_xlsx(path: Path, rows: int, cols: int) -> None:

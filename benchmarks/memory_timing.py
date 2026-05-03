@@ -8,7 +8,7 @@ Cross-library read/write rows require optional deps (`pip install -e ".[dev]"`).
   maturin develop --release
   python benchmarks/memory_timing.py
 
-Grid size follows FAST_XLSX_BENCH_ROWS / FAST_XLSX_BENCH_COLS (default 4000 × 120).
+Grid size follows VELOXLSX_BENCH_ROWS / VELOXLSX_BENCH_COLS (default 4000 × 120).
 """
 
 from __future__ import annotations
@@ -73,9 +73,9 @@ def main() -> None:
 
     path_s = str(input_path)
     read_cases: list[tuple[str, str, list[str]]] = [
-        ("fast-xlsx `read_xlsx` (nested lists)", "read", [path_s]),
-        ("fast-xlsx `iter_rows` (streaming; one row at a time)", "iter_rows", [path_s]),
-        ("fast-xlsx `load` + `read_sheet(0)`", "load_read", [path_s]),
+        ("veloxlsx `read_xlsx` (nested lists)", "read", [path_s]),
+        ("veloxlsx `iter_rows` (streaming; one row at a time)", "iter_rows", [path_s]),
+        ("veloxlsx `load` + `read_sheet(0)`", "load_read", [path_s]),
         ("openpyxl read-only `iter_rows`", "openpyxl_read", [path_s]),
         ("python-calamine `to_python()`", "calamine_read", [path_s]),
         (
@@ -96,12 +96,12 @@ def main() -> None:
 
     write_cases: list[tuple[str, str, list[str]]] = [
         (
-            "fast-xlsx `StreamWriter` (row stream)",
+            "veloxlsx `StreamWriter` (row stream)",
             "stream_write",
             [str(stream_out), str(rows), str(cols)],
         ),
         (
-            "fast-xlsx `write_xlsx` (grid in memory)",
+            "veloxlsx `write_xlsx` (grid in memory)",
             "write_xlsx",
             [str(grid_out), str(rows), str(cols)],
         ),

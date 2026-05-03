@@ -1,10 +1,10 @@
-"""XLSX read/write backed by a Rust core (``fast_xlsx._native``)."""
+"""XLSX read/write backed by a Rust core (``veloxlsx._native``)."""
 
 from __future__ import annotations
 
 from typing import TypeAlias
 
-from fast_xlsx._native import (
+from veloxlsx._native import (
     RowIter,
     Sheet,
     StreamWriter,

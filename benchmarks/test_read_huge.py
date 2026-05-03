@@ -7,7 +7,7 @@ Run from repo root (after `maturin develop`):
 
 Tune size with env vars (defaults: 4000 x 120 = 480k cells):
 
-  FAST_XLSX_BENCH_ROWS=8000 FAST_XLSX_BENCH_COLS=200 pytest benchmarks/
+  VELOXLSX_BENCH_ROWS=8000 VELOXLSX_BENCH_COLS=200 pytest benchmarks/
 
 CI uses smaller values via workflow env for a quick smoke run.
 """
@@ -20,10 +20,10 @@ import pytest
 
 
 @pytest.mark.benchmark(group="read_huge")
-def test_bench_fast_xlsx_huge(benchmark, huge_xlsx_path: Path) -> None:
-    import fast_xlsx
+def test_bench_veloxlsx_huge(benchmark, huge_xlsx_path: Path) -> None:
+    import veloxlsx
 
-    benchmark(lambda: fast_xlsx.read_xlsx(huge_xlsx_path))
+    benchmark(lambda: veloxlsx.read_xlsx(huge_xlsx_path))
 
 
 @pytest.mark.benchmark(group="read_huge")

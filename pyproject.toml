@@ -3,13 +3,13 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fast-xlsx"
+name = "veloxlsx"
 version = "0.1.0"
 description = "Python-first XLSX reader with a Rust core"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT OR Apache-2.0" }
-authors = [{ name = "fast-xlsx contributors" }]
+authors = [{ name = "veloxlsx contributors" }]
 keywords = ["xlsx", "excel", "spreadsheet", "rust"]
 classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
@@ -30,8 +30,8 @@ dev = [
 ]
 
 [tool.maturin]
-# Native code is ``fast_xlsx._native``; ``fast_xlsx`` package re-exports and ships stubs (PEP 561).
-module-name = "fast_xlsx._native"
+# Native code is ``veloxlsx._native``; ``veloxlsx`` package re-exports and ships stubs (PEP 561).
+module-name = "veloxlsx._native"
 python-source = "python"
 
 [tool.pytest.ini_options]

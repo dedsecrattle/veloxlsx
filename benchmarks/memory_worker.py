@@ -34,25 +34,25 @@ def main() -> None:
     mode = sys.argv[1]
     if mode == "read":
         path = sys.argv[2]
-        import fast_xlsx
+        import veloxlsx
 
         t0 = time.perf_counter()
-        fast_xlsx.read_xlsx(path)
+        veloxlsx.read_xlsx(path)
         ms = (time.perf_counter() - t0) * 1000.0
     elif mode == "iter_rows":
         path = sys.argv[2]
-        import fast_xlsx
+        import veloxlsx
 
         t0 = time.perf_counter()
-        for _ in fast_xlsx.iter_rows(path):
+        for _ in veloxlsx.iter_rows(path):
             pass
         ms = (time.perf_counter() - t0) * 1000.0
     elif mode == "load_read":
         path = sys.argv[2]
-        import fast_xlsx
+        import veloxlsx
 
         t0 = time.perf_counter()
-        wb = fast_xlsx.load(path)
+        wb = veloxlsx.load(path)
         wb.read_sheet(0)
         ms = (time.perf_counter() - t0) * 1000.0
     elif mode == "openpyxl_read":
@@ -95,10 +95,10 @@ def main() -> None:
         path = sys.argv[2]
         rows = int(sys.argv[3])
         cols = int(sys.argv[4])
-        import fast_xlsx
+        import veloxlsx
 
         t0 = time.perf_counter()
-        with fast_xlsx.StreamWriter(path, sheet_name="Sheet1") as w:
+        with veloxlsx.StreamWriter(path, sheet_name="Sheet1") as w:
             for r in range(rows):
                 w.write_row([r * 1_000_000 + c for c in range(cols)])
         ms = (time.perf_counter() - t0) * 1000.0
@@ -106,11 +106,11 @@ def main() -> None:
         path = sys.argv[2]
         rows = int(sys.argv[3])
         cols = int(sys.argv[4])
-        import fast_xlsx
+        import veloxlsx
 
         grid = [[r * 1_000_000 + c for c in range(cols)] for r in range(rows)]
         t0 = time.perf_counter()
-        fast_xlsx.write_xlsx(path, grid, sheet="Sheet1")
+        veloxlsx.write_xlsx(path, grid, sheet="Sheet1")
         ms = (time.perf_counter() - t0) * 1000.0
     elif mode == "xlsxwriter_write":
         path = sys.argv[2]

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import fast_xlsx
+import veloxlsx
 
 
 def test_write_xlsx_roundtrip(tmp_path: Path) -> None:
@@ -13,8 +13,8 @@ def test_write_xlsx_roundtrip(tmp_path: Path) -> None:
         ["hello", 42.5, True, None],
         ["shared", "shared", None, 1],
     ]
-    fast_xlsx.write_xlsx(path, rows, sheet="Data")
-    grid = fast_xlsx.read_xlsx(path, "Data")
+    veloxlsx.write_xlsx(path, rows, sheet="Data")
+    grid = veloxlsx.read_xlsx(path, "Data")
     assert grid[0][0] == "hello"
     assert grid[0][1] == 42.5
     assert grid[0][2] is True
@@ -27,17 +27,17 @@ def test_write_xlsx_roundtrip(tmp_path: Path) -> None:
 
 def test_stream_writer_inline_roundtrip(tmp_path: Path) -> None:
     path = tmp_path / "stream.xlsx"
-    with fast_xlsx.StreamWriter(path, sheet_name="S") as w:
+    with veloxlsx.StreamWriter(path, sheet_name="S") as w:
         w.write_row([1, None, "x"])
         w.write_row([None, 2.5, "y"])
-    grid = fast_xlsx.read_xlsx(path, "S")
+    grid = veloxlsx.read_xlsx(path, "S")
     assert grid[0] == [1, None, "x"]
     assert grid[1] == [None, 2.5, "y"]
 
 
 def test_load_after_write_sees_single_zip_parse_per_workbook(tmp_path: Path) -> None:
     path = tmp_path / "wb.xlsx"
-    fast_xlsx.write_xlsx(path, [[1], [2]], sheet="One")
-    wb = fast_xlsx.load(path)
+    veloxlsx.write_xlsx(path, [[1], [2]], sheet="One")
+    wb = veloxlsx.load(path)
     assert wb.sheet_names == ["One"]
     assert wb.read_sheet(0) == [[1.0], [2.0]]

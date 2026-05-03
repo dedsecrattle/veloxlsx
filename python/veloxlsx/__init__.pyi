@@ -1,7 +1,7 @@
 """
-Type information for :mod:`fast_xlsx`.
+Type information for :mod:`veloxlsx`.
 
-Runtime implementation lives in :mod:`fast_xlsx._native` (Rust extension).
+Runtime implementation lives in :mod:`veloxlsx._native` (Rust extension).
 """
 
 from __future__ import annotations

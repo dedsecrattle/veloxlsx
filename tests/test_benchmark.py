@@ -6,10 +6,10 @@ import pytest
 
 
 @pytest.mark.benchmark(group="read")
-def test_benchmark_fast_xlsx_read(benchmark, large_xlsx_path: Path) -> None:
-    import fast_xlsx
+def test_benchmark_veloxlsx_read(benchmark, large_xlsx_path: Path) -> None:
+    import veloxlsx
 
-    benchmark(lambda: fast_xlsx.read_xlsx(large_xlsx_path))
+    benchmark(lambda: veloxlsx.read_xlsx(large_xlsx_path))
 
 
 @pytest.mark.benchmark(group="read")

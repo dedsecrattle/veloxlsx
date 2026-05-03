@@ -200,12 +200,12 @@ pub fn write_xlsx(path: &Path, sheet_name: &str, grid: &[Vec<CellValue>]) -> Res
     zip.write_all(root_rels.as_bytes())?;
 
     let core = r#"<?xml version="1.0" encoding="UTF-8"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>fast-xlsx</dc:creator></cp:coreProperties>"#;
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>veloxlsx</dc:creator></cp:coreProperties>"#;
     zip.start_file("docProps/core.xml", opts)?;
     zip.write_all(core.as_bytes())?;
 
     let app = r#"<?xml version="1.0" encoding="UTF-8"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>fast-xlsx</Application></Properties>"#;
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>veloxlsx</Application></Properties>"#;
     zip.start_file("docProps/app.xml", opts)?;
     zip.write_all(app.as_bytes())?;
 
@@ -289,12 +289,12 @@ impl StreamingWriter {
         zip.write_all(root_rels.as_bytes())?;
 
         let core = r#"<?xml version="1.0" encoding="UTF-8"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>fast-xlsx</dc:creator></cp:coreProperties>"#;
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>veloxlsx</dc:creator></cp:coreProperties>"#;
         zip.start_file("docProps/core.xml", opts)?;
         zip.write_all(core.as_bytes())?;
 
         let app = r#"<?xml version="1.0" encoding="UTF-8"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>fast-xlsx</Application></Properties>"#;
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>veloxlsx</Application></Properties>"#;
         zip.start_file("docProps/app.xml", opts)?;
         zip.write_all(app.as_bytes())?;
 
@@ -427,7 +427,7 @@ mod tests {
             vec![text("a"), CellValue::Number(1.5), CellValue::Bool(true)],
             vec![CellValue::Empty, text("a"), CellValue::Empty],
         ];
-        let path = std::env::temp_dir().join("fast_xlsx_wtest.xlsx");
+        let path = std::env::temp_dir().join("veloxlsx_wtest.xlsx");
         write_xlsx(&path, "S", &grid).unwrap();
         let bytes = std::fs::read(&path).unwrap();
         let wb = xlsx::parse_workbook(bytes).unwrap();

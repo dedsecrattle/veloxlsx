@@ -30,6 +30,6 @@ jobs:
 
       - name: Run large read benchmarks (smoke size)
         env:
-          FAST_XLSX_BENCH_ROWS: "400"
-          FAST_XLSX_BENCH_COLS: "60"
+          VELOXLSX_BENCH_ROWS: "400"
+          VELOXLSX_BENCH_COLS: "60"
         run: .venv/bin/pytest benchmarks/
