@@ -1,11 +1,12 @@
 [package]
-name = "fast_xlsx"
+name = "veloxlsx"
 version = "0.1.0"
 edition = "2021"
 description = "Fast XLSX reader (Python bindings over Rust)"
 
 [lib]
-name = "fast_xlsx"
+# cdylib basename; PyO3 `#[pymodule] fn _native` → `PyInit__native` for `import veloxlsx._native`.
+name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]

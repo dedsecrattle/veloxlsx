@@ -79,16 +79,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "fast_xlsx"
-version = "0.1.0"
-dependencies = [
- "pyo3",
- "quick-xml",
- "thiserror",
- "zip",
-]
-
-[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -328,6 +318,16 @@ name = "unindent"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
+
+[[package]]
+name = "veloxlsx"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "quick-xml",
+ "thiserror",
+ "zip",
+]
 
 [[package]]
 name = "zip"
