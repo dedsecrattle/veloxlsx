@@ -1,143 +1,177 @@
 Architecture and Performance
-=============================
+============================
 
-Reading Modes Comparison
--------------------------
+``veloxlsx`` keeps the Python API small and moves XLSX parsing and writing into
+Rust. The implementation is optimized around workbook values rather than a rich
+Excel object model.
 
-veloxlsx provides multiple reading modes optimized for different use cases:
-
-.. graphviz::
-
-    digraph read_modes {
-        rankdir=LR;
-        node [shape=box, style=filled, fontname="Arial"];
-        
-        subgraph cluster_read_xlsx {
-            label = "read_xlsx()";
-            style=filled;
-            color=lightblue;
-            file [label="XLSX File"];
-            zip [label="Open ZIP"];
-            parse [label="Parse XML"];
-            grid [label="Build Full Grid\nin Rust"];
-            python [label="Convert to\nPython Lists"];
-            file -> zip -> parse -> grid -> python;
-        }
-        
-        subgraph cluster_iter_rows {
-            label = "iter_rows()";
-            style=filled;
-            color=lightgreen;
-            file2 [label="XLSX File"];
-            zip2 [label="Open ZIP"];
-            parse2 [label="Stream Parse\nRow by Row"];
-            yield [label="Yield Row\nto Python"];
-            file2 -> zip2 -> parse2 -> yield;
-        }
-        
-        subgraph cluster_load {
-            label = "load() + read_sheet()";
-            style=filled, color=lightyellow;
-            file3 [label="XLSX File"];
-            zip3 [label="Open ZIP\n(Reuse for all sheets)"];
-            wb [label="Workbook Object"];
-            sheet [label="Read Sheet\non Demand"];
-            file3 -> zip3 -> wb -> sheet;
-        }
-    }
-
-**Memory Usage Comparison:**
+Read Paths
+----------
 
 .. graphviz::
 
-    digraph memory {
-        rankdir=TB;
-        node [shape=box, style=filled, fontname="Arial"];
-        
-        subgraph cluster_memory {
-            label = "Peak Memory Usage (Relative)";
-            style=filled;
-            
-            read_xlsx [label="read_xlsx()\nHigh", fillcolor="#ff6b6b"];
-            iter_rows [label="iter_rows()\nLow", fillcolor="#51cf66"];
-            load_read [label="load() + read_sheet()\nHigh", fillcolor="#ff6b6b"];
-            openpyxl [label="openpyxl iter_rows()\nLow", fillcolor="#ffd43b"];
-            
-            read_xlsx -> iter_rows;
-            iter_rows -> openpyxl;
-            openpyxl -> load_read;
-        }
-    }
+   digraph read_modes {
+       rankdir=LR;
+       node [shape=box, style=filled, fontname="Arial"];
 
-**When to use each mode:**
+       subgraph cluster_read_xlsx {
+           label = "read_xlsx()";
+           style=filled;
+           color=lightblue;
+           file [label="XLSX file"];
+           zip [label="Open ZIP"];
+           parse [label="Parse worksheet XML"];
+           grid [label="Build full grid"];
+           python [label="Return Python lists"];
+           file -> zip -> parse -> grid -> python;
+       }
 
-- **`read_xlsx()`**: Best for small to medium files when you need the entire dataset in memory at once. Simple API, but higher memory usage.
-- **`iter_rows()`**: Best for large files or streaming processing. Yields one row at a time, keeping memory usage low regardless of file size.
-- **`load()` + `read_sheet()`**: Best when you need to work with multiple sheets from the same workbook. The ZIP archive is opened once and reused.
+       subgraph cluster_iter_rows {
+           label = "iter_rows()";
+           style=filled;
+           color=lightgreen;
+           file2 [label="XLSX file"];
+           zip2 [label="Open ZIP"];
+           parse2 [label="Stream parse rows"];
+           yield [label="Yield Python row"];
+           file2 -> zip2 -> parse2 -> yield;
+       }
 
-Writing Modes Comparison
-------------------------
+       subgraph cluster_load {
+           label = "load() + read_sheet()";
+           style=filled;
+           color=lightyellow;
+           file3 [label="XLSX file"];
+           zip3 [label="Open reusable ZIP"];
+           wb [label="Workbook metadata"];
+           sheet [label="Read sheet on demand"];
+           file3 -> zip3 -> wb -> sheet;
+       }
+   }
 
-veloxlsx provides two writing modes with different memory characteristics:
+.. list-table::
+   :header-rows: 1
+   :widths: 24 38 38
+
+   * - API
+     - Memory behavior
+     - Best use
+   * - ``read_xlsx``
+     - Materializes the full sheet as nested Python lists.
+     - Small and medium files where a complete in-memory grid is convenient.
+   * - ``iter_rows``
+     - Yields one row at a time and avoids a full grid for common row-based sheet XML.
+     - Large files, streaming transforms, filters, and ingestion jobs.
+   * - ``load`` + ``read_sheet``
+     - Reuses workbook metadata and the ZIP archive, then materializes requested sheets.
+     - Multi-sheet workflows where more than one operation uses the same file.
+
+Some legacy sparse worksheet layouts may require buffering internally because
+the row boundaries needed for streaming are not represented in the usual way.
+
+Write Paths
+-----------
 
 .. graphviz::
 
-    digraph write_modes {
-        rankdir=LR;
-        node [shape=box, style=filled, fontname="Arial"];
-        
-        subgraph cluster_write_xlsx {
-            label = "write_xlsx()";
-            style=filled;
-            color=lightblue;
-            data [label="Python Grid\n(List of Lists)"];
-            dedup [label="Deduplicate\nShared Strings"];
-            sst [label="Build Shared\nString Table"];
-            write [label="Write XLSX"];
-            data -> dedup -> sst -> write;
-        }
-        
-        subgraph cluster_stream_writer {
-            label = "StreamWriter";
-            style=filled;
-            color=lightgreen;
-            data2 [label="Stream Rows\nOne at a Time"];
-            inline [label="Use Inline\nStrings"];
-            write2 [label="Write XLSX\nIncrementally"];
-            data2 -> inline -> write2;
-        }
-    }
+   digraph write_modes {
+       rankdir=LR;
+       node [shape=box, style=filled, fontname="Arial"];
 
-**Memory Usage Comparison:**
+       subgraph cluster_write_xlsx {
+           label = "write_xlsx()";
+           style=filled;
+           color=lightblue;
+           data [label="Python grid"];
+           dedup [label="Deduplicate strings"];
+           sst [label="Build shared string table"];
+           write [label="Write XLSX"];
+           data -> dedup -> sst -> write;
+       }
 
-.. graphviz::
+       subgraph cluster_stream_writer {
+           label = "StreamWriter";
+           style=filled;
+           color=lightgreen;
+           data2 [label="Rows arrive over time"];
+           inline [label="Write inline strings"];
+           write2 [label="Write XLSX incrementally"];
+           data2 -> inline -> write2;
+       }
+   }
 
-    digraph write_memory {
-        rankdir=TB;
-        node [shape=box, style=filled, fontname="Arial"];
-        
-        subgraph cluster_write_mem {
-            label = "Peak Memory Usage (Relative)";
-            style=filled;
-            
-            write_xlsx [label="write_xlsx()\nMedium", fillcolor="#ffd43b"];
-            stream [label="StreamWriter()\nVery Low", fillcolor="#51cf66"];
-            xlsxwriter [label="XlsxWriter\nconstant_memory\nLow", fillcolor="#51cf66"];
-            
-            write_xlsx -> xlsxwriter;
-            xlsxwriter -> stream;
-        }
-    }
+.. list-table::
+   :header-rows: 1
+   :widths: 24 38 38
 
-**When to use each mode:**
-
-- **`write_xlsx()`**: Best when you have the complete dataset in memory. Uses shared string deduplication, which reduces file size but requires building a string table in memory.
-- **`StreamWriter`**: Best for writing very large files or when data comes incrementally. Uses inline strings to keep memory bounded during writing. File size may be larger due to no string deduplication.
+   * - API
+     - Memory behavior
+     - Best use
+   * - ``write_xlsx``
+     - Requires the input grid and builds a shared string table.
+     - Existing in-memory data where string deduplication may reduce file size.
+   * - ``StreamWriter``
+     - Writes rows incrementally with inline strings.
+     - Large exports, generator-driven data, and bounded-memory workflows.
 
 Performance Characteristics
-----------------------------
+---------------------------
 
-Based on benchmark results (4000 × 120 numeric grid, ~480k cells):
+These sample results use a generated 4000 x 120 numeric grid, about 480k cells.
+They are indicative, not a universal ranking.
+
+.. list-table:: Read performance
+   :header-rows: 1
+   :widths: 42 18 20 20
+
+   * - Method
+     - Time (ms)
+     - Peak RSS (MiB)
+     - Best for
+   * - ``read_xlsx``
+     - 236
+     - 115
+     - Simple full-sheet reads.
+   * - ``iter_rows``
+     - 259
+     - 36
+     - Streaming large sheets.
+   * - ``load`` + ``read_sheet``
+     - 241
+     - 115
+     - Reusing workbook metadata.
+   * - python-calamine
+     - 196
+     - 69
+     - Fast read-only extraction.
+   * - openpyxl read-only
+     - 603
+     - 39
+     - Feature-aware reading.
+
+.. list-table:: Write performance
+   :header-rows: 1
+   :widths: 42 18 20 20
+
+   * - Method
+     - Time (ms)
+     - Peak RSS (MiB)
+     - Best for
+   * - ``write_xlsx``
+     - 273
+     - 71
+     - In-memory grids.
+   * - ``StreamWriter``
+     - 298
+     - 16
+     - Bounded-memory exports.
+   * - XlsxWriter ``constant_memory``
+     - 830
+     - 24
+     - Rich write-only XLSX generation.
+
+Benchmark Charts
+----------------
 
 .. image:: _static/benchmark_comparison.png
    :alt: Benchmark comparison charts
@@ -145,56 +179,20 @@ Based on benchmark results (4000 × 120 numeric grid, ~480k cells):
    :width: 100%
 
 .. image:: _static/benchmark_scatter.png
-   :alt: Time vs memory tradeoff scatter plot
+   :alt: Time and memory tradeoff scatter plot
    :align: center
    :width: 80%
 
-**Read Performance:**
-
-| Method | Time (ms) | Memory (MiB) | Best For |
-|--------|-----------|--------------|----------|
-| `read_xlsx()` | 236 | 115 | Small files, simple API |
-| `iter_rows()` | 259 | 36 | Large files, streaming |
-| `load()` + `read_sheet()` | 241 | 115 | Multi-sheet workbooks |
-| python-calamine | 196 | 69 | Read-only, Rust-native |
-| openpyxl read-only | 603 | 39 | Feature-rich reading |
-
-**Write Performance:**
-
-| Method | Time (ms) | Memory (MiB) | Best For |
-|--------|-----------|--------------|----------|
-| `write_xlsx()` | 273 | 71 | Medium files, smaller output |
-| `StreamWriter` | 298 | 16 | Large files, streaming |
-| XlsxWriter constant_memory | 830 | 24 | Feature-rich writing |
-
-**Key Insights:**
-
-1. **Streaming modes** (`iter_rows`, `StreamWriter`) trade slight speed for significant memory savings
-2. **veloxlsx** is competitive with other Rust-based libraries (python-calamine) while offering write capabilities
-3. **Shared string deduplication** in `write_xlsx()` reduces file size but increases memory usage
-4. **ZIP archive reuse** in `load()` makes multi-sheet operations efficient
-
-Benchmarking Very Large Files
-------------------------------
-
-To benchmark with very large files (e.g., 100k rows × 500 columns = 50M cells):
+Run Larger Benchmarks
+---------------------
 
 .. code-block:: bash
 
-   # Set environment variables for large file size
    export VELOXLSX_BENCH_ROWS=100000
    export VELOXLSX_BENCH_COLS=500
-   
-   # Generate the large test file
-   python benchmarks/huge_fixture.py
-   
-   # Run memory timing benchmarks
    python benchmarks/memory_timing.py
-   
-   # Update visualization script with new results
-   # Edit benchmarks/visualize_results.py with your data
-   
-   # Regenerate charts
-   python benchmarks/visualize_results.py
 
-See ``benchmarks/large_file_benchmark_template.py`` for a template script for benchmarking very large files.
+The benchmark command generates the workbook once, runs each scenario in a
+subprocess, and reports wall time plus peak RSS. See
+``benchmarks/large_file_benchmark_template.py`` for a starting point when
+testing larger local workloads.

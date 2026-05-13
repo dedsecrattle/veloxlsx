@@ -1,79 +1,77 @@
 Installation
 ============
 
-From PyPI
----------
+Requirements
+------------
 
-The easiest way to install veloxlsx is via pip:
+``veloxlsx`` supports Python 3.10 and newer. Published wheels are built from a
+Rust extension module and expose a normal Python package named ``veloxlsx``.
+
+Install from PyPI
+-----------------
 
 .. code-block:: bash
 
    pip install veloxlsx
 
-From Source
------------
+Verify the install:
 
-If you want to build from source, you'll need Rust, Python 3.10+, and maturin:
+.. code-block:: python
+
+   import veloxlsx
+
+   print(veloxlsx.__all__)
+
+Build from Source
+-----------------
+
+Source builds require Rust, Python 3.10 or newer, and ``maturin``.
 
 .. code-block:: bash
 
    python -m venv .venv
    source .venv/bin/activate
+   python -m pip install --upgrade pip
    pip install maturin
    maturin develop --extras dev
 
-Development Dependencies
--------------------------
+Development Environment
+-----------------------
 
-The package includes optional development dependencies for testing and benchmarking:
+Install the optional development dependencies when running tests, benchmarks,
+or comparison scripts:
 
 .. code-block:: bash
 
    pip install -e ".[dev]"
+   maturin develop --release
+   pytest
 
-This includes:
+The development extra includes ``pytest``, ``pytest-benchmark``, ``openpyxl``,
+``pandas``, ``python-calamine``, ``xlsxwriter``, and ``matplotlib``.
 
-- pytest and pytest-benchmark for testing
-- openpyxl, pandas, python-calamine, and xlsxwriter for benchmarking comparisons
+Documentation Environment
+-------------------------
 
-Building Documentation
-----------------------
+Install the docs extra:
 
-To build the documentation locally, you need:
+.. code-block:: bash
 
-1. **Graphviz** (system package for rendering diagrams):
+   pip install -e ".[docs]"
+   sphinx-build -b html docs docs/_build/html
 
-   **macOS:**
+The Sphinx docs use Graphviz for architecture diagrams. If diagram rendering
+fails locally, install the system package:
 
-   .. code-block:: bash
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
 
-      brew install graphviz
-
-   **Ubuntu/Debian:**
-
-   .. code-block:: bash
-
-      sudo apt-get install graphviz
-
-   **Windows:**
-
-   Download from https://graphviz.org/download/ or use Chocolatey:
-
-   .. code-block:: bash
-
-      choco install graphviz
-
-2. **Python documentation dependencies:**
-
-   .. code-block:: bash
-
-      pip install -r docs/requirements.txt
-
-3. **Build the docs:**
-
-   .. code-block:: bash
-
-      cd docs
-      make html
-
-   The built documentation will be in ``docs/_build/html/``.
+   * - Platform
+     - Command
+   * - macOS
+     - ``brew install graphviz``
+   * - Ubuntu/Debian
+     - ``sudo apt-get install graphviz``
+   * - Windows
+     - Install from https://graphviz.org/download/ or run ``choco install graphviz``.

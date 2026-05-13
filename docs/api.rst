@@ -58,11 +58,17 @@ load
 Type Aliases
 ------------
 
-.. autotype:: veloxlsx.CellValue
-   :annotation:
+.. py:data:: veloxlsx.CellValue
+   :type: None | bool | int | float | str
 
-.. autotype:: veloxlsx.Row
-   :annotation:
+   A supported cell value returned by readers and accepted by writers.
 
-.. autotype:: veloxlsx.Grid
-   :annotation:
+.. py:data:: veloxlsx.Row
+   :type: list[CellValue]
+
+   A worksheet row represented as a Python list.
+
+.. py:data:: veloxlsx.Grid
+   :type: list[Row]
+
+   A materialized worksheet represented as nested Python lists.

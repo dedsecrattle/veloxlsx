@@ -28,7 +28,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",
     "sphinx.ext.graphviz",
 ]
@@ -41,6 +40,13 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
+html_title = "veloxlsx"
+html_theme_options = {
+    "source_repository": "https://github.com/dedsecrattle/fast-xlsx/",
+    "source_branch": "main",
+    "source_directory": "docs/",
+}
+html_css_files = ["custom.css"]
 
 # -- Extension configuration -------------------------------------------------
 
@@ -72,8 +78,3 @@ autodoc_default_options = {
 # Type hints
 autodoc_typehints = "description"
 autodoc_typehints_description_target = "documented"
-
-# Intersphinx mapping
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-}

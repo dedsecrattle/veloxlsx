@@ -1,5 +1,8 @@
 _build/
-_static/
+_static/*
+!_static/custom.css
+!_static/benchmark_comparison.png
+!_static/benchmark_scatter.png
 _templates/
 *.pyc
 __pycache__/

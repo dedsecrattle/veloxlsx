@@ -2,87 +2,146 @@
 
 [![PyPI Version](https://img.shields.io/pypi/v/veloxlsx)](https://pypi.org/project/veloxlsx/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/veloxlsx)](https://pypi.org/project/veloxlsx/)
+[![CI](https://github.com/dedsecrattle/fast-xlsx/actions/workflows/ci.yml/badge.svg)](https://github.com/dedsecrattle/fast-xlsx/actions/workflows/ci.yml)
+[![Documentation](https://github.com/dedsecrattle/fast-xlsx/actions/workflows/docs.yml/badge.svg)](https://dedsecrattle.github.io/fast-xlsx/)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](LICENSE-APACHE)
-[![Documentation](https://img.shields.io/badge/docs-github--pages-blue)](https://dedsecrattle.github.io/fast-xlsx/)
 
-Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks. The goal is **read speed** and a small, typed surface area while the format support grows.
-
-**Install:** `pip install veloxlsx`, then **`import veloxlsx`**.
-
-## Status (Phase 1)
-
-- Reads workbook structure, **shared strings**, and worksheet cell grids.
-- Cell kinds: numbers, booleans, shared strings, inline strings, basic error markers, plain text fallbacks.
-- **Dates** are not interpreted from number formats yet; numeric date serials may appear as floats (same caveat as many minimal readers).
-- **Styles** (fonts, fills, borders) are not applied to values.
-
-## Phase 2 — write + faster read
-
-- **`veloxlsx.write_xlsx(path, rows, sheet=...)`** — single-sheet writer with **shared-string deduplication** (memory scales with *unique* strings, not cell count).
-- **`veloxlsx.StreamWriter(path, sheet_name=...)`** — **streaming** writer: call `write_row([...])` repeatedly; uses **inline strings** so memory stays bounded (no giant SST while writing). Supports `with` / `close()`.
-- **`veloxlsx.iter_rows(path, sheet=...)`**, **`Workbook.iter_rows(...)`**, **`Sheet.iter_rows()`** — **streaming read** on the Python side: yields **one row at a time** (each row is a `list` of cell values). For typical workbooks whose cells are wrapped in `<row>` (Excel, XlsxWriter, OpenPyxl), Rust does **not** build a full `rows × cols` grid in memory; peak RSS stays much lower than `read_xlsx`. Sheets that need a **legacy** sparse layout (cells not under `<row>`) fall back internally to buffering like `read_xlsx`.
-- **Read path**: one **ZIP archive** is opened during `load()` / `parse_workbook` and **reused** for every sheet read; worksheet XML is parsed from the zip entry stream (no full-sheet `String`). Shared string table entries use **`Arc<str>`** so repeated values clone a pointer, not the text.
-
-## Benchmarks (large files vs other libraries)
-
-The default unit run (`pytest`) only hits [`tests/`](tests/). For a **large grid** comparison against **openpyxl**, **python-calamine** (Rust calamine), and **pandas** (`read_excel` with `calamine` vs `openpyxl` engines), use the separate suite under [`benchmarks/`](benchmarks/):
+`veloxlsx` is a Python XLSX reader and writer backed by a Rust core. It is built for data workflows that need a small typed API, fast workbook reads, and low-memory row streaming without pulling in a full spreadsheet object model.
 
 ```bash
-maturin develop --release
-pip install -e ".[dev]"   # includes xlsxwriter, pandas, python-calamine, pytest-benchmark
-pytest benchmarks/
+pip install veloxlsx
 ```
 
-Grid size (defaults **4000 × 120** cells ≈ **480k** values):
+```python
+import veloxlsx
 
-```bash
-VELOXLSX_BENCH_ROWS=10000 VELOXLSX_BENCH_COLS=200 pytest benchmarks/
+rows = veloxlsx.read_xlsx("book.xlsx", "Data")
+
+with veloxlsx.StreamWriter("out.xlsx", sheet_name="Export") as writer:
+    for i, row in enumerate(rows):
+        writer.write_row([i, *row])
 ```
 
-The workbook is generated with **xlsxwriter** (fast streaming write) so you are mostly measuring **read** performance, not fixture build time after the first module-scoped write.
+Full documentation: [dedsecrattle.github.io/fast-xlsx](https://dedsecrattle.github.io/fast-xlsx/)
 
-### Cross-library timing & memory (same fixture)
+## Why veloxlsx?
 
-[`benchmarks/memory_timing.py`](benchmarks/memory_timing.py) runs **one scenario per subprocess** and prints **wall time** (`time.perf_counter`) and **peak RSS** (`resource.getrusage(RUSAGE_SELF).ru_maxrss`, converted to MiB; Linux reports KiB, macOS bytes). Optional libraries are skipped if not installed (`pip install -e ".[dev]"`).
+- **Fast Rust core** for parsing workbook metadata, shared strings, and sheet XML.
+- **Streaming reads** with `iter_rows()` when you want one Python row at a time.
+- **Two write paths**: `write_xlsx()` for in-memory grids and `StreamWriter` for bounded-memory exports.
+- **Typed Python package** with PEP 561 type information.
+- **Focused feature surface** for values and basic cell types rather than styles, charts, formulas, or workbook editing.
+
+## Feature Snapshot
+
+| Capability | Status |
+|------------|--------|
+| Read `.xlsx` workbooks | Supported |
+| Select sheets by name or index | Supported |
+| Stream rows from files or loaded workbooks | Supported |
+| Write single-sheet workbooks | Supported |
+| Stream large XLSX exports | Supported |
+| Type hints | Supported |
+| Dates from number formats | Not interpreted yet |
+| Styles, charts, merged cells, formulas | Not part of the current value-focused API |
+
+Cell values are returned as `None`, `bool`, `int`, `float`, or `str`.
+
+## Quick Start
+
+### Read a workbook
+
+```python
+import veloxlsx
+
+grid = veloxlsx.read_xlsx("book.xlsx")          # first sheet
+grid = veloxlsx.read_xlsx("book.xlsx", "Data")  # by sheet name
+grid = veloxlsx.read_xlsx("book.xlsx", 0)       # by sheet index
+```
+
+### Reuse a loaded workbook
+
+```python
+import veloxlsx
+
+workbook = veloxlsx.load("book.xlsx")
+print(workbook.sheet_names)
+
+rows = workbook.read_sheet("Data")
+sheet = workbook["Data"]
+same_rows = sheet.to_list()
+```
+
+### Stream rows
+
+```python
+import veloxlsx
+
+for row in veloxlsx.iter_rows("large.xlsx", "Data"):
+    process(row)
+```
+
+### Write a workbook
+
+```python
+import veloxlsx
+
+veloxlsx.write_xlsx("out.xlsx", [["name", "count"], ["apples", 12]], sheet="Data")
+```
+
+### Stream a large export
+
+```python
+import veloxlsx
+
+with veloxlsx.StreamWriter("large-export.xlsx", sheet_name="Rows") as writer:
+    for i in range(1_000_000):
+        writer.write_row([i, f"row {i}"])
+```
+
+## Comparison
+
+Choose `veloxlsx` when you need fast value extraction or simple XLSX exports from Python. Choose a broader spreadsheet library when you need rich Excel authoring or workbook manipulation.
+
+| Library | Read | Write | Streaming | Best fit |
+|---------|------|-------|-----------|----------|
+| **veloxlsx** | Yes | Yes | Read and write | Fast value-oriented reads and simple exports |
+| **python-calamine** | Yes | No | Read-oriented | Fast Rust-backed reading across spreadsheet formats |
+| **openpyxl** | Yes | Yes | Read/write modes | Broad Excel feature coverage in pure Python |
+| **pandas** | Yes | Yes | Engine-dependent | DataFrame import/export workflows |
+| **XlsxWriter** | No | Yes | Constant-memory write mode | Rich XLSX generation |
+
+More detail is available in the [comparison guide](https://dedsecrattle.github.io/fast-xlsx/comparison.html).
+
+## Benchmarks
+
+The benchmark suite compares `veloxlsx` with `openpyxl`, `python-calamine`, `pandas`, and `XlsxWriter` using the same generated workbook.
 
 ```bash
 maturin develop --release
 pip install -e ".[dev]"
 python benchmarks/memory_timing.py
-# optional: VELOXLSX_BENCH_ROWS=10000 VELOXLSX_BENCH_COLS=200 python benchmarks/memory_timing.py
 ```
 
-Sample **read** comparison — same workbook (**4000 × 120** numeric grid, **~480k** cells); **macOS arm64**, **Python 3.13**, **release** `veloxlsx`, April 2026. Numbers are **indicative** (OS/CPU/RAM/Python build change them).
+Sample results for a `4000 x 120` numeric grid, about 480k cells, on macOS arm64 with Python 3.13 and a release build:
 
-| API / library | Time (ms) | Peak RSS (MiB) |
-|---------------|-----------|----------------|
-| veloxlsx `read_xlsx` (nested lists) | 236.3 | 114.7 |
-| veloxlsx `iter_rows` (streaming; one row at a time) | 258.8 | 36.0 |
+| Read API | Time (ms) | Peak RSS (MiB) |
+|----------|-----------|----------------|
+| veloxlsx `read_xlsx` | 236.3 | 114.7 |
+| veloxlsx `iter_rows` | 258.8 | 36.0 |
 | veloxlsx `load` + `read_sheet(0)` | 241.0 | 114.6 |
 | openpyxl read-only `iter_rows` | 603.4 | 38.9 |
 | python-calamine `to_python()` | 196.0 | 68.9 |
-| pandas `read_excel` (`engine="calamine"`) | 228.2 | 141.4 |
-| pandas `read_excel` (`engine="openpyxl"`) | 812.6 | 101.5 |
+| pandas `read_excel(engine="calamine")` | 228.2 | 141.4 |
+| pandas `read_excel(engine="openpyxl")` | 812.6 | 101.5 |
 
-Sample **write** comparison — generating a **new** file of the same shape (numeric grid):
-
-| API / library | Time (ms) | Peak RSS (MiB) |
-|---------------|-----------|----------------|
-| veloxlsx `StreamWriter` (row stream) | 298.3 | 15.6 |
-| veloxlsx `write_xlsx` (grid in Python) | 273.0 | 70.7 |
+| Write API | Time (ms) | Peak RSS (MiB) |
+|-----------|-----------|----------------|
+| veloxlsx `StreamWriter` | 298.3 | 15.6 |
+| veloxlsx `write_xlsx` | 273.0 | 70.7 |
 | XlsxWriter `constant_memory` | 829.9 | 24.3 |
 
-**How to interpret:** higher **peak RSS** usually means the API materialized a large object graph in Python (e.g. `read_xlsx` building a nested list for every cell). **`iter_rows`** avoids holding the whole sheet in Python at once and, for row-based XML, avoids a full Rust grid—here RSS is in the same ballpark as **openpyxl** read-only with **much** lower wall time. **Legacy** sheets may still buffer like `read_xlsx`. Re-run `memory_timing.py` on your machine before choosing.
-
-For pytest micro-benchmarks (not RSS), see `pytest benchmarks/`.
-
-| Library | Read | Write | Excel feature surface |
-|---------|------|-------|------------------------|
-| **veloxlsx** | Yes (`read_xlsx`, **`iter_rows`**) | Yes (`write_xlsx`, `StreamWriter`) | Values / basic cell types only (see Status above). |
-| **python-calamine** | Yes | No | Read-focused; Rust [calamine](https://github.com/tafia/calamine). |
-| **openpyxl** | Yes | Yes | Broad OOXML (styles, charts, …). |
-| **pandas** | Yes (`read_excel`) | Yes (`to_excel`, engine-dependent) | DataFrame-centric; uses engines above. |
-| **XlsxWriter** | No | Yes | Write-only; rich writing features. |
+Benchmarks are workload- and machine-dependent. Re-run them on your target environment before making library choices based on latency or memory.
 
 ## Installation
 
@@ -103,57 +162,21 @@ pip install maturin
 maturin develop --extras dev
 ```
 
-## Usage
+## Development
 
-### Reading XLSX Files
-
-```python
-import veloxlsx
-
-# Read entire sheet as nested lists
-grid = veloxlsx.read_xlsx("book.xlsx")  # first sheet
-grid = veloxlsx.read_xlsx("book.xlsx", "Sheet2")
-grid = veloxlsx.read_xlsx("book.xlsx", 0)
-
-# Load workbook for multiple operations
-wb = veloxlsx.load("book.xlsx")
-assert wb.sheet_names[0] == "Sheet1"
-same = wb.read_sheet(0)
-sheet = wb["Sheet1"]
-rows = sheet.to_list()
-
-# Stream rows one at a time (memory efficient)
-for row in wb.iter_rows("Sheet1"):
-    pass  # each row: list of None / bool / int / float / str
-
-# Streaming read from file
-for row in veloxlsx.iter_rows("book.xlsx", "Data"):
-    pass
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+maturin develop --release
+pytest
 ```
 
-### Writing XLSX Files
+Build the docs locally:
 
-```python
-import veloxlsx
-
-# Write entire grid at once
-veloxlsx.write_xlsx("out.xlsx", [["a", 1], ["b", 2]], sheet="Data")
-
-# Stream rows for large files (memory efficient)
-with veloxlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
-    for i in range(1_000_000):
-        w.write_row([i, f"row {i}"])
-```
-
-### Type Annotations
-
-The package includes full type hints (PEP 561). Use the public API for proper type checking:
-
-```python
-from veloxlsx import CellValue, Grid, Row, read_xlsx
-
-def process_rows(rows: Grid) -> list[Row]:
-    return [list(r) for r in rows]
+```bash
+pip install -e ".[docs]"
+sphinx-build -b html docs docs/_build/html
 ```
 
 ## License

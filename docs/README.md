@@ -37,11 +37,19 @@ pip install -r docs/requirements.txt
 From the repository root:
 
 ```bash
-cd docs
-make html
+pip install -e ".[docs]"
+sphinx-build -b html docs docs/_build/html
 ```
 
 The built documentation will be in `docs/_build/html/`. Open `docs/_build/html/index.html` in your browser.
+
+The public GitHub Pages site is built from:
+
+- `index.rst` - project overview and navigation
+- `usage.rst` - read/write examples
+- `comparison.rst` - library comparison and benchmark tables
+- `architecture.rst` - read/write architecture and performance notes
+- `api.rst` - generated API reference
 
 ## Updating Benchmark Images
 

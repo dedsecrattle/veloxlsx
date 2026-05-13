@@ -1,59 +1,106 @@
-veloxlsx Documentation
-======================
+veloxlsx
+========
 
-Python bindings over a Rust core for reading `.xlsx` (Office Open XML) workbooks.
-The goal is **read speed** and a small, typed surface area while the format support grows.
+Fast, typed XLSX reading and writing for Python, backed by a Rust core.
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   installation
-   usage
-   architecture
-   api
-
-Installation
-============
-
-From PyPI
----------
+``veloxlsx`` is designed for data workflows that need to read workbook values
+quickly, stream large sheets row by row, or write simple XLSX exports without a
+large spreadsheet object model.
 
 .. code-block:: bash
 
    pip install veloxlsx
 
-From Source
------------
+.. code-block:: python
 
-Requires Rust, Python 3.10+, and maturin.
+   import veloxlsx
 
-.. code-block:: bash
+   rows = veloxlsx.read_xlsx("book.xlsx", "Data")
 
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install maturin
-   maturin develop --extras dev
+   with veloxlsx.StreamWriter("export.xlsx", sheet_name="Rows") as writer:
+       for row in rows:
+           writer.write_row(row)
 
-Features
---------
+Project Focus
+-------------
 
-**Phase 1 (Current):**
+.. list-table::
+   :header-rows: 1
+   :widths: 24 46 30
 
-- Reads workbook structure, shared strings, and worksheet cell grids
-- Cell kinds: numbers, booleans, shared strings, inline strings, basic error markers, plain text fallbacks
-- Dates are not interpreted from number formats yet
-- Styles (fonts, fills, borders) are not applied to values
+   * - Area
+     - What veloxlsx does
+     - Notes
+   * - Reading
+     - Reads workbook metadata, shared strings, and worksheet cell values.
+     - Use ``read_xlsx`` for full grids or ``iter_rows`` for streaming.
+   * - Writing
+     - Writes single-sheet workbooks from grids or row streams.
+     - Use ``StreamWriter`` for large exports.
+   * - Types
+     - Returns ``None``, ``bool``, ``int``, ``float``, and ``str`` values.
+     - Type hints are shipped with the package.
+   * - Scope
+     - Focuses on values and basic cell types.
+     - Dates, styles, charts, merged cells, and formulas are not interpreted as rich Excel objects yet.
 
-**Phase 2 (Implemented):**
+When to Use It
+--------------
 
-- ``veloxlsx.write_xlsx(path, rows, sheet=...)`` — single-sheet writer with shared-string deduplication
-- ``veloxlsx.StreamWriter(path, sheet_name=...)`` — streaming writer with bounded memory usage
-- ``veloxlsx.iter_rows(path, sheet=...)`` — streaming read that yields one row at a time
-- Efficient ZIP archive reuse and Arc<str> for shared string table entries
+Use ``veloxlsx`` when you want:
 
-Indices and tables
-==================
+- a small Python API for reading XLSX values;
+- low-memory row iteration over large sheets;
+- simple XLSX export without styling or workbook editing;
+- type hints for application code.
+
+Use a richer spreadsheet package when you need to preserve formatting, charts,
+formula semantics, worksheet layout, or advanced Excel authoring features.
+
+Performance Snapshot
+--------------------
+
+Indicative results for a 4000 x 120 numeric workbook, about 480k cells, on
+macOS arm64 with Python 3.13 and a release build:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 46 27 27
+
+   * - Read API
+     - Time (ms)
+     - Peak RSS (MiB)
+   * - ``veloxlsx.read_xlsx``
+     - 236.3
+     - 114.7
+   * - ``veloxlsx.iter_rows``
+     - 258.8
+     - 36.0
+   * - openpyxl read-only ``iter_rows``
+     - 603.4
+     - 38.9
+   * - python-calamine ``to_python()``
+     - 196.0
+     - 68.9
+
+Re-run the benchmark suite on your own target machine before choosing a library
+based on latency or memory.
+
+Documentation
+-------------
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Guides
+
+   installation
+   usage
+   comparison
+   architecture
+   api
+
+Indices and Tables
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

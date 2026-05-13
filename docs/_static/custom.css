@@ -1,0 +1,25 @@
+article.bd-article h1 {
+  font-weight: 750;
+}
+
+article.bd-article h2 {
+  margin-top: 2.2rem;
+}
+
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+  white-space: normal;
+}
+
+table.docutils {
+  width: 100%;
+}
+
+table.docutils td,
+table.docutils th {
+  vertical-align: top;
+}
+
+code.literal {
+  border-radius: 4px;
+}

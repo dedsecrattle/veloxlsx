@@ -1,117 +1,141 @@
 Usage
 =====
 
-Reading XLSX Files
-------------------
+``veloxlsx`` exposes a small API around two read styles and two write styles.
+Use the full-grid APIs when the sheet is comfortably sized for memory. Use the
+streaming APIs when rows should be processed incrementally.
 
-Basic Reading
-~~~~~~~~~~~~~
+Reading Workbooks
+-----------------
 
-Read an entire sheet as nested lists:
-
-.. code-block:: python
-
-   import veloxlsx
-
-   # Read first sheet
-   grid = veloxlsx.read_xlsx("book.xlsx")
-
-   # Read specific sheet by name
-   grid = veloxlsx.read_xlsx("book.xlsx", "Sheet2")
-
-   # Read specific sheet by index
-   grid = veloxlsx.read_xlsx("book.xlsx", 0)
-
-Workbook API
-~~~~~~~~~~~~
-
-Load a workbook for multiple operations:
+Read an entire sheet as nested Python lists:
 
 .. code-block:: python
 
    import veloxlsx
 
-   wb = veloxlsx.load("book.xlsx")
-   
-   # Get sheet names
-   print(wb.sheet_names)
-   
-   # Read a sheet by index
-   grid = wb.read_sheet(0)
-   
-   # Access a sheet by name
-   sheet = wb["Sheet1"]
-   rows = sheet.to_list()
+   first_sheet = veloxlsx.read_xlsx("book.xlsx")
+   by_name = veloxlsx.read_xlsx("book.xlsx", "Data")
+   by_index = veloxlsx.read_xlsx("book.xlsx", 0)
 
-Streaming Read
-~~~~~~~~~~~~~~
+The returned value is a ``list[list[CellValue]]`` where ``CellValue`` is
+``None | bool | int | float | str``.
 
-Stream rows one at a time for memory efficiency:
+Loaded Workbook API
+-------------------
+
+Use ``load`` when you need sheet names or multiple operations on the same file.
+The workbook keeps parsed workbook metadata and reuses the underlying ZIP
+archive for sheet reads.
 
 .. code-block:: python
 
    import veloxlsx
 
-   # Stream from workbook
-   wb = veloxlsx.load("book.xlsx")
-   for row in wb.iter_rows("Sheet1"):
-       # each row: list of None / bool / int / float / str
-       print(row)
+   workbook = veloxlsx.load("book.xlsx")
+   print(workbook.sheet_names)
 
-   # Stream directly from file
-   for row in veloxlsx.iter_rows("book.xlsx", "Data"):
-       print(row)
+   rows = workbook.read_sheet("Data")
 
-Writing XLSX Files
-------------------
+   sheet = workbook["Data"]
+   same_rows = sheet.to_list()
 
-Basic Writing
-~~~~~~~~~~~~~
+Streaming Reads
+---------------
 
-Write an entire grid at once:
+``iter_rows`` yields one row at a time. For typical workbooks whose cells are
+wrapped in row elements, this avoids building a complete Rust-side grid and a
+complete Python nested list.
 
 .. code-block:: python
 
    import veloxlsx
 
-   veloxlsx.write_xlsx(
-       "out.xlsx",
-       [["a", 1], ["b", 2]],
-       sheet="Data"
-   )
+   for row in veloxlsx.iter_rows("large.xlsx", "Data"):
+       handle(row)
 
-Streaming Write
-~~~~~~~~~~~~~~~
+The same iterator is available from loaded workbooks and sheets:
 
-Stream rows for large files with bounded memory usage:
+.. code-block:: python
+
+   workbook = veloxlsx.load("large.xlsx")
+
+   for row in workbook.iter_rows("Data"):
+       handle(row)
+
+   sheet = workbook["Data"]
+   for row in sheet.iter_rows():
+       handle(row)
+
+Some legacy sparse worksheet layouts may still require internal buffering.
+
+Writing Workbooks
+-----------------
+
+Use ``write_xlsx`` when you already have all rows in memory:
 
 .. code-block:: python
 
    import veloxlsx
 
-   with veloxlsx.StreamWriter("big.xlsx", sheet_name="Sheet1") as w:
-       for i in range(1_000_000):
-           w.write_row([i, f"row {i}"])
+   rows = [
+       ["name", "count"],
+       ["apples", 12],
+       ["oranges", 8],
+   ]
 
-Type Annotations
+   veloxlsx.write_xlsx("inventory.xlsx", rows, sheet="Inventory")
+
+``write_xlsx`` builds a shared string table, so repeated strings are deduplicated
+inside the XLSX file.
+
+Streaming Writes
 ----------------
 
-The package includes full type hints (PEP 561). Use the public API for proper type checking:
+Use ``StreamWriter`` when rows are produced incrementally or the export is too
+large to keep as a Python list.
 
 .. code-block:: python
 
-   from veloxlsx import CellValue, Grid, Row, read_xlsx
+   import veloxlsx
 
-   def process_rows(rows: Grid) -> list[Row]:
-       return [list(r) for r in rows]
+   with veloxlsx.StreamWriter("events.xlsx", sheet_name="Events") as writer:
+       writer.write_row(["id", "message"])
+       for i in range(1_000_000):
+           writer.write_row([i, f"event {i}"])
+
+``StreamWriter`` writes inline strings to keep memory bounded. The resulting
+file may be larger than a shared-string workbook when the same string repeats
+many times.
 
 Cell Values
 -----------
 
-Cell values can be one of the following types:
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
 
-- ``None`` - Empty cells
-- ``bool`` - Boolean values
-- ``int`` - Integer numbers
-- ``float`` - Floating point numbers
-- ``str`` - String values (shared strings or inline strings)
+   * - Python type
+     - Meaning
+   * - ``None``
+     - Empty cell.
+   * - ``bool``
+     - Boolean cell value.
+   * - ``int``
+     - Integer value where the parsed numeric value is integral.
+   * - ``float``
+     - Floating point value or numeric date serial.
+   * - ``str``
+     - Shared string, inline string, error marker, or plain text fallback.
+
+Type Annotations
+----------------
+
+The package ships PEP 561 type information:
+
+.. code-block:: python
+
+   from veloxlsx import CellValue, Grid, Row
+
+   def drop_empty_rows(rows: Grid) -> list[Row]:
+       return [row for row in rows if any(value is not None for value in row)]
